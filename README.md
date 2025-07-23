@@ -6,8 +6,8 @@ A minimalist real-time strategy game inspired by Auralux. Playable in the browse
 
 ## 🌟 Project Goals
 
-* [x] Develop a 2D browser game in TypeScript (Auralux-inspired)
-* [x] Web support with minimal UI
+* [ ] Develop a 2D browser game in TypeScript (Auralux-inspired)
+* [ ] Web support with minimal UI
 * [ ] Real-time multiplayer via WebSocket (Socket.io)
 * [ ] Elegant and minimal aesthetic interface
 * [ ] Basic AI for solo mode
