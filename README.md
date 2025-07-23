@@ -1,4 +1,20 @@
+
+<div align="center">
+
 # 🌌 Project: **LUXFIELD**
+
+<p>
+  <img src="https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=fff" />
+  <img src="https://img.shields.io/badge/Phaser-242424?logo=phaser&logoColor=fff" />
+  <img src="https://img.shields.io/badge/Node.js-339933?logo=node.js&logoColor=fff" />
+  <img src="https://img.shields.io/badge/Express-000000?logo=express&logoColor=fff" />
+  <img src="https://img.shields.io/badge/Socket.io-010101?logo=socket.io&logoColor=fff" />
+  <img src="https://img.shields.io/badge/Vite-646cff?logo=vite&logoColor=fff" />
+  <img src="https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=fff" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=fff" />
+</p>
+
+</div>
 
 A minimalist real-time strategy game inspired by Auralux. Playable in the browser with a simple interface and a relaxing ambient atmosphere. The player conquers planets by sending luminous unit flows.
 
