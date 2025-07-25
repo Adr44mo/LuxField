@@ -88,7 +88,7 @@ export class GameEngine {
     const deltaTime = (this.currentTime - this.lastUpdateTime) / 1000; // seconds
     this.lastUpdateTime = this.currentTime;
 
-    // Update all units
+    // Update all units with smooth movement
     for (const unit of this.units.values()) {
       const planet = this.planets.get(unit.planetId);
       if (planet) {

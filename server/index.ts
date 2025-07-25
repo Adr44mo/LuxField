@@ -113,7 +113,7 @@ function startGameLoop() {
       gameEngine.update();
       broadcastGameState();
     }
-  }, 100); // 10 FPS
+  }, 50); // 20 FPS for smoother updates
 }
 
 

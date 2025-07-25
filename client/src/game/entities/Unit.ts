@@ -47,6 +47,8 @@ export class Unit {
     this.circle = scene.add.circle(0, 0, 12, data.color).setStrokeStyle(2, 0xffffff);
     this.updatePosition(0);
   }
+
+  
   /**
    * Remove the last drawn highlight and create a new one if selected.
    * Always call this after changing selection or position.
@@ -61,6 +63,16 @@ export class Unit {
     }
   }
 
+  /**
+   * Remove and destroy the highlight if it exists.
+   */
+  removeHighlight() {
+    if (this.highlight) {
+      this.highlight.destroy();
+      this.highlight = null;
+    }
+  }
+
   updatePosition(time: number) {
     // Use backend x/y if present, else orbit
     let x = this.x, y = this.y;
@@ -70,17 +82,23 @@ export class Unit {
     }
     this.circle.x = x;
     this.circle.y = y;
-    // Always redraw highlight to follow the unit
-    if (this.selected) {
-      this.redrawHighlight();
-    } else if (this.highlight) {
-      this.highlight.destroy();
-      this.highlight = null;
+    
+    // Update highlight position to follow unit
+    if (this.highlight) {
+      this.highlight.x = x;
+      this.highlight.y = y;
     }
   }
+
   setSelected(selected: boolean) {
+    const wasSelected = this.selected;
     this.selected = selected;
-    this.redrawHighlight();
+    
+    // Only redraw if selection state changed
+    if (true){//wasSelected !== selected) 
+      this.redrawHighlight();
+    }
+    
     if (selected) {
       // Debug: log selection
       // eslint-disable-next-line no-console
@@ -90,5 +108,25 @@ export class Unit {
       // eslint-disable-next-line no-console
       console.log(`[DEBUG] Unit deselected: id=${this.id}, owner=${this.owner}`);
     }
+  }
+
+  static removeOrphanHighlights(scene: Phaser.Scene, units: Unit[]) {
+    // Collect all highlight objects currently referenced by units
+    const referenced = new Set<Phaser.GameObjects.Arc>();
+    for (const unit of units) {
+      if (unit.highlight) referenced.add(unit.highlight);
+    }
+    // Remove only highlight circles that are not referenced by any unit
+    scene.children.list.forEach(obj => {
+      if (
+        obj instanceof Phaser.GameObjects.Arc &&
+        obj.strokeColor === 0xffff00 &&
+        obj.fillColor === 0xffff00 &&
+        obj.radius === 18 &&
+        !referenced.has(obj)
+      ) {
+        obj.destroy();
+      }
+    });
   }
 }

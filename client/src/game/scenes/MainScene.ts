@@ -157,6 +157,7 @@ export class MainScene extends Phaser.Scene {
         this.selectionManager.updateUnitsAndPlanets(this.units, this.planets);
       }
     }
+    Unit.removeOrphanHighlights(this, this.units);
     this.updateStatsText();
   }
 
@@ -174,17 +175,23 @@ export class MainScene extends Phaser.Scene {
   }
 
   update() {
-    // Animate units using backend time
-    // Interpolate gameTime for smooth animation
+    // Animate units using backend time with smooth interpolation
     let interpTime = this.lastGameTime;
     if (this.lastGameTimeReceivedAt) {
-      interpTime += Date.now() - this.lastGameTimeReceivedAt;
+      const timeSinceLastUpdate = Date.now() - this.lastGameTimeReceivedAt;
+      // Clamp interpolation to prevent excessive extrapolation
+      interpTime += Math.min(timeSinceLastUpdate, 200);
     }
+    
     for (const unit of this.units) {
       unit.updatePosition(interpTime / 1000); // convert ms to seconds for smoothness
     }
-    // Update highlights via SelectionManager
-    if (this.selectionManager) this.selectionManager.updateHighlights();
+    
+    // Update highlights via SelectionManager (less frequently)
+    if (this.selectionManager && this.time.now % 5 === 0) {
+      this.selectionManager.updateHighlights();
+    }
+    
     this.updateStatsText();
   }
 }

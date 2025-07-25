@@ -32,13 +32,13 @@ export class CoreUnit {
   // Update unit position based on time
   updatePosition(planetX: number, planetY: number, deltaTime: number): void {
     if (this.target && !this.isOrbiting) {
-      // Moving to target
+      // Moving to target - smoother movement
       const dx = this.target.x - (this.x || 0);
       const dy = this.target.y - (this.y || 0);
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      if (distance > 5) {
-        // Still moving
+      if (distance > 3) {
+        // Still moving - use smooth interpolation
         const moveDistance = this.moveSpeed * deltaTime;
         const ratio = Math.min(moveDistance / distance, 1);
         this.x = (this.x || 0) + dx * ratio;
@@ -51,8 +51,8 @@ export class CoreUnit {
         this.isOrbiting = false;
       }
     } else if (this.isOrbiting) {
-      // Orbiting planet
-      this.angle += deltaTime * 0.5; // rotation speed
+      // Orbiting planet - smooth rotation
+      this.angle += deltaTime * 0.8; // slightly faster rotation
       this.x = planetX + Math.cos(this.angle) * this.distance;
       this.y = planetY + Math.sin(this.angle) * this.distance;
     }
