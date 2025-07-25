@@ -4,3 +4,9 @@ Write-Host "=== Arrêt du backend et du frontend (processus npm run dev) ==="
 Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*\\node.exe" } | Stop-Process -Force
 
 Write-Host "=== Tous les serveurs LuxField sont arrêtés ==="
+
+# Get-Process node
+
+# Get-Process node | Stop-Process -Force
+
+# netstat -ano | findstr :3000

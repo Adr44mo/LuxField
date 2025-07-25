@@ -1,42 +1,42 @@
+// Client-side Planet wrapper that extends CorePlanet with Phaser rendering
 import Phaser from 'phaser';
-import type { PlayerID, Stats } from '../types';
 
-export class Planet {
-  scene: Phaser.Scene;
+export interface PlanetData {
+  id: string;
   x: number;
   y: number;
   radius: number;
   color: number;
-  owner: PlayerID;
-  stats: Stats;
-  circle: Phaser.GameObjects.Arc;
-
+  owner: number;
   maxUnits: number;
-  productionSpeed: number; // units per second
-  lastProducedAt: number; // ms
-  units: any[] = [];
+  productionSpeed: number;
+  units: any[];
+}
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    radius: number,
-    color: number,
-    owner: PlayerID,
-    stats: Stats,
-    maxUnits: number = 8,
-    productionSpeed: number = 1 // 1 unit/sec
-  ) {
-    this.scene = scene;
-    this.x = x;
-    this.y = y;
-    this.radius = radius;
-    this.color = color;
-    this.owner = owner;
-    this.stats = stats;
-    this.circle = scene.add.circle(x, y, radius, color).setStrokeStyle(4, 0xffffff);
-    this.maxUnits = maxUnits;
-    this.productionSpeed = productionSpeed;
-    this.lastProducedAt = 0;
+export class Planet {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  color: number;
+  owner: number;
+  maxUnits: number;
+  productionSpeed: number;
+  circle: Phaser.GameObjects.Arc;
+  units: any[] = []; // Client units for compatibility
+
+  constructor(scene: Phaser.Scene, data: PlanetData) {
+    this.id = data.id;
+    this.x = data.x;
+    this.y = data.y;
+    this.radius = data.radius;
+    this.color = data.color;
+    this.owner = data.owner;
+    this.maxUnits = data.maxUnits;
+    this.productionSpeed = data.productionSpeed;
+    this.units = [];
+    
+    // Create Phaser circle for rendering
+    this.circle = scene.add.circle(this.x, this.y, this.radius, this.color).setStrokeStyle(4, 0xffffff);
   }
 }

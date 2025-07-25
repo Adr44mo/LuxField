@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { Planet } from '../entities/Planet';
-import { Unit } from '../entities/Unit';
+import { Planet, PlanetData } from '../entities/Planet';
+import { Unit, UnitData } from '../entities/Unit';
 import type { Stats } from '../types';
+import { SelectionManager } from '../selection/SelectionManager';
 
 export class MainScene extends Phaser.Scene {
   planets: Planet[] = [];
@@ -11,6 +12,10 @@ export class MainScene extends Phaser.Scene {
   myTeam: number = 0;
   myColor: number = 0x888888;
   statsText!: Phaser.GameObjects.Text;
+  selectionManager: SelectionManager | null = null;
+  dragStart: Phaser.Math.Vector2 | null = null;
+  dragRect: Phaser.GameObjects.Graphics | null = null;
+  socket: any = null;
 
   constructor() {
     super('MainScene');
@@ -44,12 +49,83 @@ export class MainScene extends Phaser.Scene {
     this.updateStatsText();
 
     // Listen for gameState updates from backend
-    const socket = (this.scene.settings.data as any)?.socket;
-    if (socket) {
-      socket.on('gameState', (state: any) => {
+    this.socket = (this.scene.settings.data as any)?.socket;
+    if (this.socket) {
+      this.socket.on('gameState', (state: any) => {
         this.renderGameState(state);
       });
     }
+
+    // SelectionManager setup
+    this.selectionManager = new SelectionManager(this.units, this.planets, this.myTeam);
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (!this.selectionManager) return;
+      // Check if clicked on a planet
+      const clickedPlanet = this.planets.find(p => {
+        const dx = pointer.x - p.x;
+        const dy = pointer.y - p.y;
+        return Math.sqrt(dx * dx + dy * dy) < p.radius;
+      });
+      if (clickedPlanet) {
+        this.selectionManager.selectUnitsAroundPlanet(clickedPlanet);
+        return;
+      }
+      // Check if clicked on a unit (own units only)
+      const clicked = this.units.find(u => {
+        const dx = pointer.x - u.circle.x;
+        const dy = pointer.y - u.circle.y;
+        return Math.sqrt(dx * dx + dy * dy) < 14 && u.owner === this.myTeam;
+      });
+      if (clicked) {
+        this.selectionManager.selectUnit(clicked);
+        // Debug: log selection state
+        // eslint-disable-next-line no-console
+        console.log('[DEBUG] Clicked unit:', clicked.id, 'Selected:', !!this.selectionManager.selectedUnit);
+      } else if (this.selectionManager.selectedUnits.length > 0) {
+        // Send move command for all selected units
+        const unitIds = this.selectionManager.selectedUnits.map(u => u.id);
+        this.socket.emit('moveUnits', {
+          unitIds: unitIds,
+          x: pointer.x,
+          y: pointer.y
+        });
+        this.selectionManager.clearSelection();
+      } else {
+        // Start drag selection
+        this.dragStart = new Phaser.Math.Vector2(pointer.x, pointer.y);
+        if (!this.dragRect) {
+          this.dragRect = this.add.graphics();
+        }
+        this.dragRect.clear();
+        this.dragRect.lineStyle(2, 0xffff00, 1);
+        this.dragRect.strokeRect(pointer.x, pointer.y, 1, 1);
+      }
+    });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.dragStart && this.dragRect) {
+        this.dragRect.clear();
+        this.dragRect.lineStyle(2, 0xffff00, 1);
+        const x = Math.min(this.dragStart.x, pointer.x);
+        const y = Math.min(this.dragStart.y, pointer.y);
+        const w = Math.abs(pointer.x - this.dragStart.x);
+        const h = Math.abs(pointer.y - this.dragStart.y);
+        this.dragRect.strokeRect(x, y, w, h);
+      }
+    });
+
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (this.dragStart && this.dragRect && this.selectionManager) {
+        const x1 = Math.min(this.dragStart.x, pointer.x);
+        const y1 = Math.min(this.dragStart.y, pointer.y);
+        const x2 = Math.max(this.dragStart.x, pointer.x);
+        const y2 = Math.max(this.dragStart.y, pointer.y);
+        this.selectionManager.selectUnitsInRect(x1, y1, x2, y2);
+        this.dragRect.clear();
+        this.dragStart = null;
+      }
+    });
     // Render initial state if present
     if (this.gameState) {
       this.renderGameState(this.gameState);
@@ -67,28 +143,25 @@ export class MainScene extends Phaser.Scene {
     this.units = [];
     if (state && state.planets) {
       for (const p of state.planets) {
-        const baseStats: Stats = { health: 100, damage: 10, production: 1 };
-        const planet = new Planet(
-          this,
-          p.x,
-          p.y,
-          p.radius,
-          p.color,
-          p.owner,
-          baseStats,
-          p.maxUnits,
-          p.productionSpeed
-        );
+        const planet = new Planet(this, p as PlanetData);
         this.planets.push(planet);
         // Units
         for (const u of p.units) {
-          const unit = new Unit(this, planet, u.angle, u.distance, u.color, baseStats);
+          const unit = new Unit(this, planet, u as UnitData);
           this.units.push(unit);
           planet.units.push(unit);
         }
       }
+      // Update selectionManager with new units/planets
+      if (this.selectionManager) {
+        this.selectionManager.updateUnitsAndPlanets(this.units, this.planets);
+      }
     }
     this.updateStatsText();
+  }
+
+  clearSelection() {
+    if (this.selectionManager) this.selectionManager.clearSelection();
   }
 
   updateStatsText() {
@@ -110,6 +183,8 @@ export class MainScene extends Phaser.Scene {
     for (const unit of this.units) {
       unit.updatePosition(interpTime / 1000); // convert ms to seconds for smoothness
     }
+    // Update highlights via SelectionManager
+    if (this.selectionManager) this.selectionManager.updateHighlights();
     this.updateStatsText();
   }
 }
