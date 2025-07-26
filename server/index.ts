@@ -1,10 +1,10 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { GameEngine } from '../shared/entities/GameEngine';
-import { CorePlanet } from '../shared/entities/CorePlanet';
-import { CoreUnit } from '../shared/entities/CoreUnit';
-import { GameState, MoveCommand, PlayerID } from '../shared/types';
+import { GameEngine } from './shared/entities/GameEngine';
+import { CorePlanet } from './shared/entities/CorePlanet';
+import { CoreUnit } from './shared/entities/CoreUnit';
+import { GameState, MoveCommand, PlayerID } from './shared/types';
 
 const app = express();
 const httpServer = createServer(app);
