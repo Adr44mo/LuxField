@@ -2,7 +2,8 @@
   "name": "luxfield-client",
   "version": "0.1.0",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "build": "vite build"
   },
   "dependencies": {
     "phaser": "^3.90.0",

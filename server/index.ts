@@ -1,4 +1,3 @@
-
 import express from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
@@ -206,6 +205,8 @@ io.on('connection', (socket: Socket) => {
     broadcastLobby();
   });
 });
+
+app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
