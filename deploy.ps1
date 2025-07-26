@@ -13,10 +13,11 @@ Copy-Item -Recurse -Force client/dist/* server/public/
 
 Write-Host "=== Switching to deploy branch and merging main ==="
 git checkout deploy
-git merge main
+git merge -s ours main
+git checkout main -- .
 
 Write-Host "=== Adding and committing built files ==="
-git add server/public
+git add -f server/public
 git commit -m "Deploy: update built frontend and merge main"
 git push origin deploy
 
