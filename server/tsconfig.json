@@ -4,7 +4,15 @@
     "module": "CommonJS",
     "strict": true,
     "esModuleInterop": true,
-    "outDir": "dist"
+    "outDir": "./dist",
+    "rootDir": "../"
   },
-  "include": ["index.ts"]
+  "include": [
+    "./index.ts",
+    "../shared/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
