@@ -7,6 +7,7 @@ import { SelectionManager } from '../selection/SelectionManager';
 export class MainScene extends Phaser.Scene {
   planets: Planet[] = [];
   units: Unit[] = [];
+  endPanel: Phaser.GameObjects.Container | null = null;
   playerId: string = '';
   players: { id: string; color: number; team: number }[] = [];
   myTeam: number = 0;
@@ -53,6 +54,10 @@ export class MainScene extends Phaser.Scene {
     if (this.socket) {
       this.socket.on('gameState', (state: any) => {
         this.renderGameState(state);
+        // Only show end panel if game has run for at least 1 second
+        if (state.winner !== undefined && this.endPanel == null && (state.time ?? 0) > 1000) {
+          this.showEndPanel(state.winner);
+        }
       });
     }
 
@@ -67,7 +72,7 @@ export class MainScene extends Phaser.Scene {
         const dy = pointer.y - p.y;
         return Math.sqrt(dx * dx + dy * dy) < p.radius;
       });
-      if (clickedPlanet) {
+      if (clickedPlanet && clickedPlanet.owner === this.myTeam) {
         this.selectionManager.selectUnitsAroundPlanet(clickedPlanet);
         return;
       }
@@ -136,15 +141,23 @@ export class MainScene extends Phaser.Scene {
     this.gameTime = state.time || 0;
     this.lastGameTime = this.gameTime;
     this.lastGameTimeReceivedAt = Date.now();
-    // Remove old planets/units
-    for (const p of this.planets) p.circle.destroy();
-    for (const u of this.units) u.circle.destroy();
+    // Remove old planets/units and all their graphics
+    for (const p of this.planets) {
+      p.circle.destroy();
+      if (p.healthArcGreen) p.healthArcGreen.destroy();
+      if (p.healthArcRed) p.healthArcRed.destroy();
+    }
+    for (const u of this.units) {
+      u.circle.destroy();
+      u.removeHighlight();
+    }
     this.planets = [];
     this.units = [];
     if (state && state.planets) {
       for (const p of state.planets) {
         const planet = new Planet(this, p as PlanetData);
         this.planets.push(planet);
+        planet.updateColor(p.color);
         // Units
         for (const u of p.units) {
           const unit = new Unit(this, planet, u as UnitData);
@@ -157,7 +170,7 @@ export class MainScene extends Phaser.Scene {
         this.selectionManager.updateUnitsAndPlanets(this.units, this.planets);
       }
     }
-    Unit.removeOrphanHighlights(this, this.units);
+    //Unit.removeOrphanHighlights(this, this.units);
     this.updateStatsText();
   }
 
@@ -175,23 +188,50 @@ export class MainScene extends Phaser.Scene {
   }
 
   update() {
-    // Animate units using backend time with smooth interpolation
-    let interpTime = this.lastGameTime;
-    if (this.lastGameTimeReceivedAt) {
+    // Improved interpolation: smoothly interpolate between backend updates
+    let interpFactor = 0;
+    const updateInterval = 50; // ms, should match backend broadcast interval
+    if (this.lastGameTimeReceivedAt && this.lastGameTime) {
       const timeSinceLastUpdate = Date.now() - this.lastGameTimeReceivedAt;
-      // Clamp interpolation to prevent excessive extrapolation
-      interpTime += Math.min(timeSinceLastUpdate, 200);
+      interpFactor = Math.min(timeSinceLastUpdate / updateInterval, 1);
     }
-    
+
     for (const unit of this.units) {
-      unit.updatePosition(interpTime / 1000); // convert ms to seconds for smoothness
+      // If you want to interpolate between previous and current positions, you need to store previous positions.
+      // For now, we use backend time + interpolation factor for smoother movement.
+      const t = (this.lastGameTime / 1000) + interpFactor * (updateInterval / 1000);
+      unit.updatePosition(t);
     }
-    
+
     // Update highlights via SelectionManager (less frequently)
     if (this.selectionManager && this.time.now % 5 === 0) {
       this.selectionManager.updateHighlights();
     }
-    
+
     this.updateStatsText();
+  }
+  showEndPanel(winner: number) {
+    const isWinner = this.myTeam === winner;
+    const text = isWinner ? 'You Win!' : 'You Lose';
+    const panel = this.add.container(this.cameras.main.centerX, this.cameras.main.centerY);
+    const bg = this.add.rectangle(0, 0, 400, 200, 0x222222, 0.95).setOrigin(0.5);
+    const resultText = this.add.text(0, -40, text, {
+      fontSize: '48px',
+      color: isWinner ? '#66ff66' : '#ff6666',
+      fontFamily: 'Arial',
+      align: 'center'
+    }).setOrigin(0.5);
+    const btn = this.add.text(0, 60, 'Return to Menu', {
+      fontSize: '28px',
+      color: '#fff',
+      backgroundColor: '#444',
+      padding: { left: 24, right: 24, top: 8, bottom: 8 },
+      fontFamily: 'Arial'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    btn.on('pointerdown', () => {
+      this.scene.start('MenuScene', { socket: this.socket });
+    });
+    panel.add([bg, resultText, btn]);
+    this.endPanel = panel;
   }
 }

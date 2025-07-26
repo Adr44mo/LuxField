@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --watch . --exec ts-node index.ts",
+    "dev": "nodemon --watch . --watch ../shared --exec ts-node index.ts",
     "build": "tsc"
   },
   "dependencies": {

@@ -2,6 +2,8 @@
 import { PlanetData, UnitData, Stats, PlayerID, Position } from '../types';
 
 export class CorePlanet {
+  claimingTeam: PlayerID | null = null;
+  claimingProgress: number = 0;
   id: string;
   x: number;
   y: number;
@@ -13,6 +15,8 @@ export class CorePlanet {
   productionSpeed: number;
   lastProducedAt: number;
   units: UnitData[] = [];
+  health: number;
+  maxHealth: number;
 
   constructor(data: Partial<PlanetData> & { id: string; x: number; y: number }) {
     this.id = data.id;
@@ -26,6 +30,8 @@ export class CorePlanet {
     this.productionSpeed = data.productionSpeed || 1;
     this.lastProducedAt = 0;
     this.units = data.units || [];
+    this.maxHealth = data.maxHealth || 100;
+    this.health = data.health !== undefined ? data.health : this.maxHealth;
   }
 
   // Core game logic methods
@@ -82,7 +88,69 @@ export class CorePlanet {
       stats: this.stats,
       maxUnits: this.maxUnits,
       productionSpeed: this.productionSpeed,
-      units: this.units
+      units: this.units,
+      health: this.health,
+      maxHealth: this.maxHealth,
+      claimingTeam: this.claimingTeam === null ? undefined : this.claimingTeam,
+      claimingTeamColor: this.claimingTeam ? this.getTeamColor(this.claimingTeam) : undefined,
+      claimingProgress: this.claimingProgress
     };
+
+  }
+
+  // Helper to get team color (example: you may need to pass a color map from GameEngine)
+  getTeamColor(teamId: PlayerID): number {
+    // Example: hardcoded colors, replace with your actual color logic
+    const COLORS = [0x3399ff, 0xff6666, 0x66ff66, 0xffcc00, 0x888888];
+    if (teamId > 0 && teamId <= COLORS.length) return COLORS[teamId - 1];
+    return 0x888888;
+  }
+  /**
+   * Handle collision with a unit. Returns true if unit should be destroyed.
+   */
+  handleUnitCollision(unit: UnitData): boolean {
+    // Claiming logic for neutral planets
+    if (this.owner === 0) {
+      if (this.claimingTeam === null || this.claimingTeam === unit.owner) {
+        // Start or continue claiming by this team
+        this.claimingTeam = unit.owner;
+        this.claimingProgress += 10;
+        this.health = Math.min(this.maxHealth, this.claimingProgress);
+        if (this.claimingProgress >= this.maxHealth) {
+          this.owner = this.claimingTeam;
+          this.color = unit.color;
+          this.claimingTeam = null;
+          this.claimingProgress = 0;
+        }
+        return true;
+      } else {
+        // Enemy team attacks: reduce health and claiming progress
+        this.health = Math.max(0, this.health - 10);
+        this.claimingProgress = Math.max(0, this.claimingProgress - 10);
+        if (this.health === 0) {
+          // Only reset claiming if health reaches zero
+          this.claimingTeam = null;
+          this.claimingProgress = 0;
+        }
+        return true;
+      }
+    } else if (unit.owner === this.owner && this.owner !== 0) {
+      // Allied unit: heal planet only if not at full health
+      if (this.health < this.maxHealth) {
+        this.health = Math.min(this.maxHealth, this.health + 10);
+        return true;
+      }
+      // If planet is full health, do nothing (no collision)
+      return false;
+    } else if (unit.owner !== this.owner && unit.owner !== 0) {
+      // Enemy unit: damage planet
+      this.health = Math.max(0, this.health - 10);
+      if (this.health === 0) {
+        this.owner = 0; // Set to neutral when health reaches zero
+        this.color = 0x888888; // Reset color to neutral gray
+      }
+      return true;
+    }
+    return false;
   }
 }

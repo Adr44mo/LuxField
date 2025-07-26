@@ -31,7 +31,9 @@ function createInitialGameState(): void {
     color: COLORS[0],
     owner: 1,
     maxUnits: 8,
-    productionSpeed: 1
+    productionSpeed: 1,
+    health: 100,
+    maxHealth: 100
   });
   
   const planet2 = new CorePlanet({
@@ -42,7 +44,9 @@ function createInitialGameState(): void {
     color: COLORS[1],
     owner: 2,
     maxUnits: 8,
-    productionSpeed: 1
+    productionSpeed: 1,
+    health: 100,
+    maxHealth: 100
   });
   
   // Add some neutral planets
@@ -54,7 +58,9 @@ function createInitialGameState(): void {
     color: 0x888888,
     owner: 0,
     maxUnits: 6,
-    productionSpeed: 0.5
+    productionSpeed: 0.5,
+    health: 100,
+    maxHealth: 100
   });
   
   gameEngine.addPlanet(planet1);
@@ -101,7 +107,8 @@ function broadcastLobby() {
 
 function broadcastGameState() {
   if (gameEngine) {
-    const gameState = gameEngine.getGameState();
+    // Use update() to get winner property when game ends
+    const gameState = gameEngine.update();
     io.emit('gameState', gameState);
   }
 }
@@ -110,7 +117,6 @@ function startGameLoop() {
   if (gameLoop) clearInterval(gameLoop);
   gameLoop = setInterval(() => {
     if (gameEngine) {
-      gameEngine.update();
       broadcastGameState();
     }
   }, 50); // 20 FPS for smoother updates

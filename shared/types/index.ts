@@ -23,6 +23,11 @@ export interface PlanetData {
   maxUnits: number;
   productionSpeed: number;
   units: UnitData[];
+  health: number;
+  maxHealth: number;
+  claimingTeam?: PlayerID;
+  claimingTeamColor?: number;
+  claimingProgress?: number;
 }
 
 export interface UnitData {
@@ -42,6 +47,7 @@ export interface UnitData {
 export interface GameState {
   time: number;
   planets: PlanetData[];
+  winner?: number;
 }
 
 export interface PlayerCommand {

@@ -109,6 +109,19 @@ export class GameEngine {
       }
     }
 
+    // Win/lose detection
+    const teamsWithPlanets = new Set<number>();
+    for (const planet of this.planets.values()) {
+      if (planet.owner > 0) teamsWithPlanets.add(planet.owner);
+    }
+    // Only set winner if game has run for at least 1 second
+    if ((this.currentTime ?? 0) > 1000 && teamsWithPlanets.size === 1 && (teamsWithPlanets.has(1) || teamsWithPlanets.has(2))) {
+      const winner = Array.from(teamsWithPlanets)[0];
+      const gameState = this.getGameState();
+      (gameState as any).winner = winner;
+      return gameState;
+    }
+
     // Return current game state
     return this.getGameState();
   }
@@ -116,20 +129,30 @@ export class GameEngine {
   // Handle unit collisions
   private handleCollisions(): void {
     const allUnits = Array.from(this.units.values());
-    
+    // Handle unit-unit collisions (enemy units)
     for (let i = 0; i < allUnits.length; i++) {
       const unit1 = allUnits[i];
       if (!unit1.x || !unit1.y) continue;
-      
       for (let j = i + 1; j < allUnits.length; j++) {
         const unit2 = allUnits[j];
         if (!unit2.x || !unit2.y) continue;
-        
-        // Only collide enemy units
         if (unit1.owner !== unit2.owner && unit1.collidesWith(unit2)) {
           this.removeUnit(unit1.id);
           this.removeUnit(unit2.id);
-          break; // unit1 is destroyed, exit inner loop
+          break;
+        }
+      }
+      // Handle unit-planet collision (health logic)
+      for (const planet of this.planets.values()) {
+        const dx = unit1.x - planet.x;
+        const dy = unit1.y - planet.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= planet.radius + 10) {
+            if (planet.handleUnitCollision(unit1.toData())) {
+              this.removeUnit(unit1.id);
+            }
+
+          break; // Only one planet collision per unit per frame
         }
       }
     }
