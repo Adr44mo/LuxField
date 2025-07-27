@@ -7,6 +7,9 @@ import { CoreUnit } from './shared/entities/CoreUnit';
 import { GameState, MoveCommand, PlayerID } from './shared/types';
 
 const app = express();
+if (process.env.SERVE_FRONT === 'true') {
+  app.use(express.static('public'));
+}
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*' } });
 
@@ -205,8 +208,6 @@ io.on('connection', (socket: Socket) => {
     broadcastLobby();
   });
 });
-
-app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
