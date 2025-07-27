@@ -1,5 +1,10 @@
 # deploy.ps1
 
+Write-Host "=== Switching to deploy branch and merging main ==="
+git checkout deploy
+git merge -s ours main
+git checkout main -- .
+
 Write-Host "=== Building frontend ==="
 cd client
 npm install
@@ -10,11 +15,6 @@ cd ..
 if (!(Test-Path "server/public")) { mkdir "server/public" }
 Remove-Item -Recurse -Force server/public/*
 Copy-Item -Recurse -Force client/dist/* server/public/
-
-Write-Host "=== Switching to deploy branch and merging main ==="
-git checkout deploy
-git merge -s ours main
-git checkout main -- .
 
 Write-Host "=== Adding and committing built files ==="
 git add -f server/public
