@@ -7,7 +7,10 @@ import { CoreUnit } from './shared/entities/CoreUnit';
 import { GameState, MoveCommand, PlayerID } from './shared/types';
 
 const app = express();
-app.use(express.static('public'));
+if (process.env.SERVE_FRONT === 'true') {
+  console.log('Serving frontend from /public');
+  app.use(express.static('public'));
+}
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*' } });
 

@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MainScene } from './game/scenes/MainScene';
 import { MenuScene } from './game/scenes/MenuScene';
 
-const socket = io('http://localhost:3000');
+const socket = io(import.meta.env.VITE_SOCKET_SERVER_URL || window.location.origin);
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
