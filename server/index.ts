@@ -8,6 +8,7 @@ import { GameState, MoveCommand, PlayerID } from './shared/types';
 
 const app = express();
 if (process.env.SERVE_FRONT === 'true') {
+  console.log('Serving frontend from /public');
   app.use(express.static('public'));
 }
 const httpServer = createServer(app);
