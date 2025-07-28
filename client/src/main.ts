@@ -26,3 +26,4 @@ const game = new Phaser.Game(config);
 
 // Ensure socket is passed to scenes on start
 game.scene.start('MenuScene', { socket });
+import './registerSW';

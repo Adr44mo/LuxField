@@ -3,6 +3,8 @@ import { Planet, PlanetData } from '../entities/Planet';
 import { Unit, UnitData } from '../entities/Unit';
 import type { Stats } from '../types';
 import { SelectionManager } from '../selection/SelectionManager';
+import { InputManager } from '../input/InputManager';
+import { PhoneInputManager } from '../input/PhoneInputManager';
 
 export class MainScene extends Phaser.Scene {
   planets: Planet[] = [];
@@ -14,10 +16,13 @@ export class MainScene extends Phaser.Scene {
   myColor: number = 0x888888;
   statsText!: Phaser.GameObjects.Text;
   selectionManager: SelectionManager | null = null;
-  dragStart: Phaser.Math.Vector2 | null = null;
-  dragRect: Phaser.GameObjects.Graphics | null = null;
   socket: any = null;
   mapDimensions: { width: number; height: number } = { width: 1200, height: 800 };
+
+  // Input managers
+  inputManager: InputManager | null = null;
+  phoneInputManager: PhoneInputManager | null = null;
+  isMobileDevice: boolean = false;
 
   constructor() {
     super('MainScene');
@@ -89,84 +94,34 @@ export class MainScene extends Phaser.Scene {
     // SelectionManager setup
     this.selectionManager = new SelectionManager(this.units, this.planets, this.myTeam);
 
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (!this.selectionManager) return;
-      // Use world coordinates for all pointer logic
-      const wx = pointer.worldX;
-      const wy = pointer.worldY;
-      // Check if clicked on a planet
-      const clickedPlanet = this.planets.find(p => {
-        const dx = wx - p.x;
-        const dy = wy - p.y;
-        return Math.sqrt(dx * dx + dy * dy) < p.radius;
-      });
-      if (clickedPlanet && clickedPlanet.owner === this.myTeam) {
-        this.selectionManager.selectUnitsAroundPlanet(clickedPlanet);
-        return;
-      }
-      // Check if clicked on a unit (own units only)
-      const clicked = this.units.find(u => {
-        const dx = wx - u.circle.x;
-        const dy = wy - u.circle.y;
-        return Math.sqrt(dx * dx + dy * dy) < 14 && u.owner === this.myTeam;
-      });
-      if (clicked) {
-        this.selectionManager.selectUnit(clicked);
-        // Debug: log selection state
-        // eslint-disable-next-line no-console
-        console.log('[DEBUG] Clicked unit:', clicked.id, 'Selected:', !!this.selectionManager.selectedUnit);
-      } else if (this.selectionManager.selectedUnits.length > 0) {
-        // Send move command for all selected units
-        const unitIds = this.selectionManager.selectedUnits.map(u => u.id);
-        this.socket.emit('moveUnits', {
-          unitIds: unitIds,
-          x: wx,
-          y: wy
-        });
-        this.selectionManager.clearSelection();
-      } else {
-        // Start drag selection
-        this.dragStart = new Phaser.Math.Vector2(wx, wy);
-        if (!this.dragRect) {
-          this.dragRect = this.add.graphics();
-        }
-        this.dragRect.clear();
-        this.dragRect.lineStyle(2, 0xffff00, 1);
-        this.dragRect.strokeRect(wx, wy, 1, 1);
-      }
-    });
+    // Detect mobile device and setup appropriate input manager
+    this.isMobileDevice = this.detectMobileDevice();
+    
+    if (this.isMobileDevice) {
+      console.log('[DEBUG] Setting up mobile input manager');
+      this.phoneInputManager = new PhoneInputManager(this, this.socket, this.myTeam);
+      this.phoneInputManager.setSelectionManager(this.selectionManager);
+      this.phoneInputManager.setUnitsAndPlanets(this.units, this.planets);
+    } else {
+      console.log('[DEBUG] Setting up desktop input manager');
+      this.inputManager = new InputManager(this, this.socket, this.myTeam);
+      this.inputManager.setSelectionManager(this.selectionManager);
+      this.inputManager.setUnitsAndPlanets(this.units, this.planets);
+    }
 
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (this.dragStart && this.dragRect) {
-        const wx = pointer.worldX;
-        const wy = pointer.worldY;
-        this.dragRect.clear();
-        this.dragRect.lineStyle(2, 0xffff00, 1);
-        const x = Math.min(this.dragStart.x, wx);
-        const y = Math.min(this.dragStart.y, wy);
-        const w = Math.abs(wx - this.dragStart.x);
-        const h = Math.abs(wy - this.dragStart.y);
-        this.dragRect.strokeRect(x, y, w, h);
-      }
-    });
-
-    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      if (this.dragStart && this.dragRect && this.selectionManager) {
-        const wx = pointer.worldX;
-        const wy = pointer.worldY;
-        const x1 = Math.min(this.dragStart.x, wx);
-        const y1 = Math.min(this.dragStart.y, wy);
-        const x2 = Math.max(this.dragStart.x, wx);
-        const y2 = Math.max(this.dragStart.y, wy);
-        this.selectionManager.selectUnitsInRect(x1, y1, x2, y2);
-        this.dragRect.clear();
-        this.dragStart = null;
-      }
-    });
     // Render initial state if present
     if (this.gameState) {
       this.renderGameState(this.gameState);
     }
+  }
+
+  private detectMobileDevice(): boolean {
+    // Utilise la méthode statique de PhoneInputManager si dispo, sinon regex fallback
+    if (typeof PhoneInputManager !== 'undefined' && typeof (PhoneInputManager as any).isMobile === 'function') {
+      return (PhoneInputManager as any).isMobile();
+    }
+    // Fallback regex
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }
 
   renderGameState(state: any) {
@@ -201,6 +156,14 @@ export class MainScene extends Phaser.Scene {
       if (this.selectionManager) {
         this.selectionManager.updateUnitsAndPlanets(this.units, this.planets);
       }
+      
+      // Update input managers with new units/planets
+      if (this.inputManager) {
+        this.inputManager.setUnitsAndPlanets(this.units, this.planets);
+      }
+      if (this.phoneInputManager) {
+        this.phoneInputManager.setUnitsAndPlanets(this.units, this.planets);
+      }
     }
     //Unit.removeOrphanHighlights(this, this.units);
     this.updateStatsText();
@@ -220,22 +183,9 @@ export class MainScene extends Phaser.Scene {
   }
 
   update() {
-    // Camera controls (WASD movement)
-    const cameraSpeed = 5;
-    const keys = this.input.keyboard?.addKeys('Z,S,Q,D') as any;
-    if (keys) {
-      if (keys.Z?.isDown) {
-        this.cameras.main.scrollY -= cameraSpeed;
-      }
-      if (keys.S?.isDown) {
-        this.cameras.main.scrollY += cameraSpeed;
-      }
-      if (keys.Q?.isDown) {
-        this.cameras.main.scrollX -= cameraSpeed;
-      }
-      if (keys.D?.isDown) {
-        this.cameras.main.scrollX += cameraSpeed;
-      }
+    // Update camera controls via input manager (desktop only)
+    if (this.inputManager && !this.isMobileDevice) {
+      this.inputManager.updateCameraControls();
     }
     
     // Improved interpolation: smoothly interpolate between backend updates
