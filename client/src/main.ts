@@ -7,8 +7,8 @@ const socket = io(import.meta.env.VITE_SOCKET_SERVER_URL || window.location.orig
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 900,
-  height: 600,
+  width: 1200,
+  height: 800,
   backgroundColor: '#222',
   scene: [MenuScene, MainScene],
   callbacks: {

@@ -17,6 +17,7 @@ export class MainScene extends Phaser.Scene {
   dragStart: Phaser.Math.Vector2 | null = null;
   dragRect: Phaser.GameObjects.Graphics | null = null;
   socket: any = null;
+  mapDimensions: { width: number; height: number } = { width: 1200, height: 800 };
 
   constructor() {
     super('MainScene');
@@ -28,17 +29,40 @@ export class MainScene extends Phaser.Scene {
   lastGameTimeReceivedAt: number = 0;
 
   init(data: any) {
+    console.log('[DEBUG] MainScene: init called with data:', data);
     this.playerId = data?.playerId || '';
     this.players = data?.players || [];
     this.gameState = data?.gameState || null;
+    this.mapDimensions = data?.mapDimensions || { width: 1200, height: 800 };
+    this.socket = data?.socket;
+    
+    console.log('[DEBUG] MainScene: initialized with:', {
+      playerId: this.playerId,
+      playersCount: this.players.length,
+      hasGameState: !!this.gameState,
+      mapDimensions: this.mapDimensions,
+      hasSocket: !!this.socket
+    });
+    
     const me = this.players.find(p => p.id === this.playerId);
     if (me) {
       this.myTeam = me.team;
       this.myColor = me.color;
+      console.log('[DEBUG] MainScene: Found my player data:', { team: this.myTeam, color: this.myColor });
+    } else {
+      console.warn('[DEBUG] MainScene: Could not find my player in players array');
     }
   }
 
   create() {
+    // Set up camera bounds based on map dimensions
+    this.cameras.main.setBounds(0, 0, this.mapDimensions.width, this.mapDimensions.height);
+    
+    // Create a background
+    const bg = this.add.rectangle(this.mapDimensions.width / 2, this.mapDimensions.height / 2, 
+                                 this.mapDimensions.width, this.mapDimensions.height, 0x001122);
+    bg.setDepth(-1);
+    
     // Affiche l'équipe/couleur et stats du joueur
     this.statsText = this.add.text(20, 20, '', {
       fontSize: '20px',
@@ -47,10 +71,11 @@ export class MainScene extends Phaser.Scene {
       backgroundColor: '#222',
       padding: { left: 10, right: 10, top: 5, bottom: 5 }
     });
+    this.statsText.setScrollFactor(0); // Keep UI fixed on screen
     this.updateStatsText();
 
     // Listen for gameState updates from backend
-    this.socket = (this.scene.settings.data as any)?.socket;
+    this.socket = this.socket || (this.scene.settings.data as any)?.socket;
     if (this.socket) {
       this.socket.on('gameState', (state: any) => {
         this.renderGameState(state);
@@ -66,10 +91,13 @@ export class MainScene extends Phaser.Scene {
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (!this.selectionManager) return;
+      // Use world coordinates for all pointer logic
+      const wx = pointer.worldX;
+      const wy = pointer.worldY;
       // Check if clicked on a planet
       const clickedPlanet = this.planets.find(p => {
-        const dx = pointer.x - p.x;
-        const dy = pointer.y - p.y;
+        const dx = wx - p.x;
+        const dy = wy - p.y;
         return Math.sqrt(dx * dx + dy * dy) < p.radius;
       });
       if (clickedPlanet && clickedPlanet.owner === this.myTeam) {
@@ -78,8 +106,8 @@ export class MainScene extends Phaser.Scene {
       }
       // Check if clicked on a unit (own units only)
       const clicked = this.units.find(u => {
-        const dx = pointer.x - u.circle.x;
-        const dy = pointer.y - u.circle.y;
+        const dx = wx - u.circle.x;
+        const dy = wy - u.circle.y;
         return Math.sqrt(dx * dx + dy * dy) < 14 && u.owner === this.myTeam;
       });
       if (clicked) {
@@ -92,40 +120,44 @@ export class MainScene extends Phaser.Scene {
         const unitIds = this.selectionManager.selectedUnits.map(u => u.id);
         this.socket.emit('moveUnits', {
           unitIds: unitIds,
-          x: pointer.x,
-          y: pointer.y
+          x: wx,
+          y: wy
         });
         this.selectionManager.clearSelection();
       } else {
         // Start drag selection
-        this.dragStart = new Phaser.Math.Vector2(pointer.x, pointer.y);
+        this.dragStart = new Phaser.Math.Vector2(wx, wy);
         if (!this.dragRect) {
           this.dragRect = this.add.graphics();
         }
         this.dragRect.clear();
         this.dragRect.lineStyle(2, 0xffff00, 1);
-        this.dragRect.strokeRect(pointer.x, pointer.y, 1, 1);
+        this.dragRect.strokeRect(wx, wy, 1, 1);
       }
     });
 
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
       if (this.dragStart && this.dragRect) {
+        const wx = pointer.worldX;
+        const wy = pointer.worldY;
         this.dragRect.clear();
         this.dragRect.lineStyle(2, 0xffff00, 1);
-        const x = Math.min(this.dragStart.x, pointer.x);
-        const y = Math.min(this.dragStart.y, pointer.y);
-        const w = Math.abs(pointer.x - this.dragStart.x);
-        const h = Math.abs(pointer.y - this.dragStart.y);
+        const x = Math.min(this.dragStart.x, wx);
+        const y = Math.min(this.dragStart.y, wy);
+        const w = Math.abs(wx - this.dragStart.x);
+        const h = Math.abs(wy - this.dragStart.y);
         this.dragRect.strokeRect(x, y, w, h);
       }
     });
 
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
       if (this.dragStart && this.dragRect && this.selectionManager) {
-        const x1 = Math.min(this.dragStart.x, pointer.x);
-        const y1 = Math.min(this.dragStart.y, pointer.y);
-        const x2 = Math.max(this.dragStart.x, pointer.x);
-        const y2 = Math.max(this.dragStart.y, pointer.y);
+        const wx = pointer.worldX;
+        const wy = pointer.worldY;
+        const x1 = Math.min(this.dragStart.x, wx);
+        const y1 = Math.min(this.dragStart.y, wy);
+        const x2 = Math.max(this.dragStart.x, wx);
+        const y2 = Math.max(this.dragStart.y, wy);
         this.selectionManager.selectUnitsInRect(x1, y1, x2, y2);
         this.dragRect.clear();
         this.dragStart = null;
@@ -188,6 +220,24 @@ export class MainScene extends Phaser.Scene {
   }
 
   update() {
+    // Camera controls (WASD movement)
+    const cameraSpeed = 5;
+    const keys = this.input.keyboard?.addKeys('Z,S,Q,D') as any;
+    if (keys) {
+      if (keys.Z?.isDown) {
+        this.cameras.main.scrollY -= cameraSpeed;
+      }
+      if (keys.S?.isDown) {
+        this.cameras.main.scrollY += cameraSpeed;
+      }
+      if (keys.Q?.isDown) {
+        this.cameras.main.scrollX -= cameraSpeed;
+      }
+      if (keys.D?.isDown) {
+        this.cameras.main.scrollX += cameraSpeed;
+      }
+    }
+    
     // Improved interpolation: smoothly interpolate between backend updates
     let interpFactor = 0;
     const updateInterval = 50; // ms, should match backend broadcast interval
@@ -213,7 +263,8 @@ export class MainScene extends Phaser.Scene {
   showEndPanel(winner: number) {
     const isWinner = this.myTeam === winner;
     const text = isWinner ? 'You Win!' : 'You Lose';
-    const panel = this.add.container(this.cameras.main.centerX, this.cameras.main.centerY);
+    const panel = this.add.container(this.cameras.main.width / 2, this.cameras.main.height / 2);
+    panel.setScrollFactor(0); // Keep panel fixed on screen
     const bg = this.add.rectangle(0, 0, 400, 200, 0x222222, 0.95).setOrigin(0.5);
     const resultText = this.add.text(0, -40, text, {
       fontSize: '48px',
