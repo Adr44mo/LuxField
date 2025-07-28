@@ -1,5 +1,7 @@
 # deploy.ps1
 
+# don't forget to change the .env.render file before deploying!
+
 Write-Host "=== Switching to deploy branch and merging main ==="
 git checkout deploy
 git merge -s ours main

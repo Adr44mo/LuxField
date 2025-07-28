@@ -22,7 +22,9 @@ export class MenuScene extends Phaser.Scene {
   colorButtons: Phaser.GameObjects.Text[] = [];
   teamButtons: Phaser.GameObjects.Text[] = [];
   mapButton!: Phaser.GameObjects.Text;
-  mapName: string = 'Default Map';
+  mapId: string = 'classic';
+  availableMaps: any[] = [];
+  currentMapIndex: number = 0;
 
   constructor() {
     super('MenuScene');
@@ -83,14 +85,16 @@ export class MenuScene extends Phaser.Scene {
     });
     this.updateTeamButtons();
 
-    // Map selection (only one for now)
-    this.mapButton = this.add.text(width / 2, 340, `Map: ${this.mapName}`, {
+    // Map selection
+    this.mapButton = this.add.text(width / 2, 340, `Map: Loading...`, {
       fontSize: '20px', color: '#fff', backgroundColor: '#888', padding: { left: 16, right: 16, top: 8, bottom: 8 }, fontFamily: 'Arial'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.mapButton.on('pointerdown', () => {
-      if (this.isHost) {
-        // Only host can change map
-        this.socket.emit('chooseMap', { map: this.mapName });
+      if (this.isHost && this.availableMaps.length > 0) {
+        // Cycle through available maps
+        this.currentMapIndex = (this.currentMapIndex + 1) % this.availableMaps.length;
+        const selectedMap = this.availableMaps[this.currentMapIndex];
+        this.socket.emit('chooseMap', { mapId: selectedMap.id });
       }
     });
     this.lobbyUIGroup.add(this.mapButton);
@@ -133,7 +137,13 @@ export class MenuScene extends Phaser.Scene {
       this.lobbyId = data.lobbyId;
       this.players = data.players;
       this.isHost = data.hostId === this.playerId;
-      this.mapName = data.mapName || 'Default Map';
+      this.mapId = data.mapId || 'classic';
+      this.availableMaps = data.availableMaps || [];
+      
+      // Find current map index
+      this.currentMapIndex = this.availableMaps.findIndex(map => map.id === this.mapId);
+      if (this.currentMapIndex === -1) this.currentMapIndex = 0;
+      
       // Show lobby UI only if in a lobby
       this.lobbyUIGroup.setVisible(!!this.lobbyId);
       this.createLobbyBtn.setVisible(!this.lobbyId);
@@ -141,23 +151,30 @@ export class MenuScene extends Phaser.Scene {
       this.updatePlayerList();
       this.updateHostControls();
       this.updateTeamButtons();
-      this.mapButton.setText(`Map: ${this.mapName}`);
+      this.updateMapButton();
     });
     this.socket.on('kicked', () => {
       alert('You were kicked from the lobby.');
       this.scene.restart();
     });
     this.socket.on('start', (data: any) => {
+      console.log('[DEBUG] MenuScene: Received start event', data);
       this.started = true;
       this.startButton.setAlpha(1);
       this.startButton.setInteractive({ useHandCursor: true });
       // Start the game with the shared state
+      console.log('[DEBUG] MenuScene: Starting MainScene with data:', {
+        playerId: this.playerId,
+        players: this.players,
+        gameState: data?.gameState,
+        mapDimensions: data?.mapDimensions
+      });
       this.scene.start('MainScene', {
         playerId: this.playerId,
         players: this.players,
         gameState: data?.gameState,
         socket: this.socket,
-        mapName: this.mapName
+        mapDimensions: data?.mapDimensions
       });
     });
   }
@@ -234,6 +251,22 @@ export class MenuScene extends Phaser.Scene {
     this.teamButtons.forEach((btn, i) => {
       btn.setAlpha(this.selectedTeam === i + 1 ? 1 : 0.7);
     });
+  }
+
+  updateMapButton() {
+    if (this.availableMaps.length > 0 && this.currentMapIndex >= 0) {
+      const currentMap = this.availableMaps[this.currentMapIndex];
+      this.mapButton.setText(`Map: ${currentMap.name}`);
+      if (this.isHost) {
+        this.mapButton.setBackgroundColor('#666666');
+        this.mapButton.setAlpha(1);
+      } else {
+        this.mapButton.setBackgroundColor('#888888');
+        this.mapButton.setAlpha(0.7);
+      }
+    } else {
+      this.mapButton.setText('Map: Loading...');
+    }
   }
 
   allReady() {

@@ -5,6 +5,7 @@ import { GameEngine } from './shared/entities/GameEngine';
 import { CorePlanet } from './shared/entities/CorePlanet';
 import { CoreUnit } from './shared/entities/CoreUnit';
 import { GameState, MoveCommand, PlayerID } from './shared/types';
+import { MapManager } from './maps/MapManager';
 
 const app = express();
 if (process.env.SERVE_FRONT === 'true') {
@@ -22,7 +23,7 @@ type Lobby = {
   id: string;
   hostId: string;
   players: LobbyPlayer[];
-  mapName: string;
+  mapId: string;
   gameEngine?: GameEngine;
   gameLoop?: NodeJS.Timeout;
 };
@@ -36,7 +37,8 @@ function emitLobbyUpdate(lobby: Lobby) {
       lobbyId: lobby.id,
       players: lobby.players,
       hostId: lobby.hostId,
-      mapName: lobby.mapName,
+      mapId: lobby.mapId,
+      availableMaps: MapManager.getAllMaps(),
     });
   });
 }
@@ -64,7 +66,7 @@ io.on('connection', (socket: Socket) => {
       id: lobbyId,
       hostId: socket.id,
       players: [player],
-      mapName: 'Default Map',
+      mapId: 'classic',
     };
     socket.join(lobbyId);
     emitLobbyUpdate(lobbies[lobbyId]);
@@ -113,11 +115,14 @@ io.on('connection', (socket: Socket) => {
     });
   });
 
-  socket.on('chooseMap', ({ map }) => {
+  socket.on('chooseMap', ({ mapId }) => {
     Object.values(lobbies).forEach(lobby => {
       if (lobby.hostId === socket.id) {
-        lobby.mapName = map;
-        emitLobbyUpdate(lobby);
+        // Validate map exists
+        if (MapManager.getMap(mapId)) {
+          lobby.mapId = mapId;
+          emitLobbyUpdate(lobby);
+        }
       }
     });
   });
@@ -148,56 +153,47 @@ io.on('connection', (socket: Socket) => {
       console.log(`[DEBUG] startGame: Not enough players in lobby ${lobbyId}`);
       return;
     }
-    // Create game state using lobby info
+    
+    // Create game state using lobby info and selected map
     const gameEngine = new GameEngine();
     lobby.gameEngine = gameEngine;
     console.log(`[DEBUG] startGame: Created gameEngine for lobby ${lobbyId}`);
-    // Example: create planets and units for each player
-    lobby.players.forEach((p, idx) => {
-      const planet = new CorePlanet({
-        id: `planet${idx+1}`,
-        x: 200 + idx * 200,
-        y: 300,
-        radius: 40,
-        color: COLORS[p.team - 1],
-        owner: p.team,
-        maxUnits: 8,
-        productionSpeed: 1,
-        health: 100,
-        maxHealth: 100
-      });
-      gameEngine.addPlanet(planet);
-      for (let i = 0; i < 3; i++) {
-        const unit = new CoreUnit({
-          id: `unit${p.team}_${i}`,
-          planetId: planet.id,
-          angle: (i * Math.PI * 2) / 3,
-          distance: 60,
-          color: COLORS[p.team - 1],
-          owner: p.team,
-          stats: { health: 100, damage: 10, production: 1 },
-          isOrbiting: true
-        });
-        gameEngine.addUnit(unit);
-      }
-    });
-    // Add a neutral planet
-    const neutralPlanet = new CorePlanet({
-      id: 'neutral1',
-      x: 400,
-      y: 200,
-      radius: 30,
-      color: 0x888888,
-      owner: 0,
-      maxUnits: 6,
-      productionSpeed: 0.5,
-      health: 100,
-      maxHealth: 100
-    });
-    gameEngine.addPlanet(neutralPlanet);
-    console.log(`[DEBUG] startGame: Game started for lobby ${lobbyId}`);
+    
+    // Prepare player info for map generation
+    const playerInfos = lobby.players.map(p => ({
+      id: p.id,
+      team: p.team,
+      color: p.color
+    }));
+    
+    // Generate map using the map system
+    const success = MapManager.generateMap(lobby.mapId, gameEngine, playerInfos);
+    if (!success) {
+      console.error(`[DEBUG] startGame: Failed to generate map ${lobby.mapId} for lobby ${lobbyId}`);
+      return;
+    }
+    
+    console.log(`[DEBUG] startGame: Generated map ${lobby.mapId} for lobby ${lobbyId}`);
     emitLobbyUpdate(lobby);
-    io.to(lobbyId).emit('start', { gameState: gameEngine.getGameState() });
+    
+    // Get map dimensions for the frontend
+    const mapDimensions = MapManager.getMapDimensions(lobby.mapId);
+    const gameState = gameEngine.getGameState();
+    const startData = { 
+      gameState: gameState,
+      mapDimensions: mapDimensions
+    };
+    
+    console.log(`[DEBUG] startGame: Sending start event to lobby ${lobbyId}`, {
+      gameStateHasPlanets: !!gameState?.planets,
+      planetCount: gameState?.planets?.length || 0,
+      mapDimensions: mapDimensions,
+      playersInLobby: lobby.players.length,
+      socketRooms: Array.from(io.sockets.adapter.rooms.get(lobbyId) || [])
+    });
+    
+    io.to(lobbyId).emit('start', startData);
+    
     // Start per-lobby game loop
     if (lobby.gameLoop) clearInterval(lobby.gameLoop);
     lobby.gameLoop = setInterval(() => {
