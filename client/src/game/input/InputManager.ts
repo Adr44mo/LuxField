@@ -30,23 +30,58 @@ export class InputManager {
     this.planets = planets;
   }
 
+  private isDraggingCamera: boolean = false;
+  private lastPointerPosition: { x: number; y: number } | null = null;
+
   private setupInputHandlers() {
     this.setupPointerEvents();
     this.setupKeyboardControls();
+    // Mouse wheel zoom (Phaser 3: use DOM event)
+    this.scene.input.manager.canvas.addEventListener('wheel', (event: WheelEvent) => {
+      event.preventDefault();
+      this.handleZoom(event.deltaY);
+    }, { passive: false });
   }
 
   private setupPointerEvents() {
     this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.handlePointerDown(pointer);
+      if (pointer.rightButtonDown()) {
+        this.isDraggingCamera = true;
+        this.lastPointerPosition = { x: pointer.x, y: pointer.y };
+      } else {
+        this.handlePointerDown(pointer);
+      }
     });
 
     this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      this.handlePointerMove(pointer);
+      if (this.isDraggingCamera && this.lastPointerPosition) {
+        const dx = pointer.x - this.lastPointerPosition.x;
+        const dy = pointer.y - this.lastPointerPosition.y;
+        this.scene.cameras.main.scrollX -= dx;
+        this.scene.cameras.main.scrollY -= dy;
+        this.lastPointerPosition = { x: pointer.x, y: pointer.y };
+      } else {
+        this.handlePointerMove(pointer);
+      }
     });
 
     this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      this.handlePointerUp(pointer);
+      if (this.isDraggingCamera) {
+        this.isDraggingCamera = false;
+        this.lastPointerPosition = null;
+      } else {
+        this.handlePointerUp(pointer);
+      }
     });
+  }
+  private handleZoom(deltaY: number) {
+    const camera = this.scene.cameras.main;
+    const zoomFactor = 0.1;
+    if (deltaY > 0) {
+      camera.zoom = Math.max(0.5, camera.zoom - zoomFactor);
+    } else {
+      camera.zoom = Math.min(2, camera.zoom + zoomFactor);
+    }
   }
 
   private handlePointerDown(pointer: Phaser.Input.Pointer) {
@@ -145,7 +180,16 @@ export class InputManager {
   }
 
   private setupKeyboardControls() {
-    // Keyboard controls will be handled in update method
+    // Keyboard controls for camera movement and zoom
+    this.scene.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      const camera = this.scene.cameras.main;
+      if (event.key === '+' || event.key === '=' || event.key === 'Add' || event.key === 'NumpadAdd') {
+        camera.zoom = Math.min(2, camera.zoom + 0.1);
+      }
+      if (event.key === '-' || event.key === '_' || event.key === 'Subtract' || event.key === 'NumpadSubtract' || event.key === 'NumpadMinus') {
+        camera.zoom = Math.max(0.5, camera.zoom - 0.1);
+      }
+    });
   }
 
   public updateCameraControls() {

@@ -38,25 +38,57 @@ export class PhoneInputManager {
     this.planets = planets;
   }
 
-  private setupMobileInputHandlers() {
-    // Mobile touch events
-    this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.handleTouchStart(pointer);
-    });
+  private pinchStartDistance: number | null = null;
+  private pinchStartZoom: number | null = null;
 
-    this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      this.handleTouchMove(pointer);
-    });
-
-    this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      this.handleTouchEnd(pointer);
-    });
-
-    // Pinch to zoom (if needed later)
-    this.scene.input.on('wheel', (pointer: any, deltaX: number, deltaY: number) => {
-      this.handleZoom(deltaY);
-    });
+  private isTouchDevice(): boolean {
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   }
+
+  private setupMobileInputHandlers() {
+  // Support up to 2 pointers for multitouch
+  this.scene.input.addPointer(2);
+
+  this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+    this.handleTouchStart(pointer);
+  });
+
+  this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+    const isTouch = this.isTouchDevice();
+    const pointer1 = this.scene.input.pointer1;
+    const pointer2 = this.scene.input.pointer2;
+
+    if (isTouch && pointer1.isDown && pointer2.isDown) {
+      // Handle pinch-to-zoom
+      const currDist = Phaser.Math.Distance.Between(pointer1.x, pointer1.y, pointer2.x, pointer2.y);
+      if (!this.pinchStartDistance) {
+        this.pinchStartDistance = currDist;
+        this.pinchStartZoom = this.scene.cameras.main.zoom;
+      } else if (this.pinchStartZoom) {
+        const zoomChange = currDist / this.pinchStartDistance;
+        this.scene.cameras.main.zoom = Phaser.Math.Clamp(this.pinchStartZoom * zoomChange, 0.5, 2);
+      }
+    } else {
+      // Reset pinch state and allow drag/pan
+      this.pinchStartDistance = null;
+      this.pinchStartZoom = null;
+      this.handleTouchMove(pointer);
+    }
+  });
+
+  this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+    this.handleTouchEnd(pointer);
+    this.pinchStartDistance = null;
+    this.pinchStartZoom = null;
+  });
+
+  this.scene.input.on('wheel', (pointer: any, deltaX: number, deltaY: number) => {
+    if (!this.isTouchDevice()) {
+      this.handleZoom(deltaY);
+    }
+  });
+  }
+
 
   private handleTouchStart(pointer: Phaser.Input.Pointer) {
     this.touchStartTime = Date.now();
@@ -84,16 +116,16 @@ export class PhoneInputManager {
     const deltaY = pointer.y - this.lastPanPosition.y;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-    // If we've moved more than threshold, start camera panning
-    if (distance > this.panThreshold) {
-      this.isDraggingCamera = true;
-      this.panCamera(-deltaX, -deltaY);
-      this.lastPanPosition = { x: pointer.x, y: pointer.y };
+    if (this.isLongPress && this.dragStart && this.dragRect) {
+        // Update the drag selection rectangle instead of panning
+        this.updateDragSelection(pointer.worldX, pointer.worldY);
+        return;
     }
 
-    // Update drag selection if active
-    if (this.dragStart && this.dragRect && !this.isDraggingCamera) {
-      this.updateDragSelection(pointer.worldX, pointer.worldY);
+    if (distance > this.panThreshold) {
+        this.isDraggingCamera = true;
+        this.panCamera(-deltaX, -deltaY);
+        this.lastPanPosition = { x: pointer.x, y: pointer.y };
     }
   }
 

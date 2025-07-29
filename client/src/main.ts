@@ -5,10 +5,10 @@ import { MenuScene } from './game/scenes/MenuScene';
 
 const socket = io(import.meta.env.VITE_SOCKET_SERVER_URL || window.location.origin);
 
+const getScreenSize = () => ({ width: window.innerWidth, height: window.innerHeight });
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 1200,
-  height: 800,
+  ...getScreenSize(),
   backgroundColor: '#222',
   scene: [MenuScene, MainScene],
   callbacks: {
@@ -24,6 +24,14 @@ const config: Phaser.Types.Core.GameConfig = {
 
 const game = new Phaser.Game(config);
 
+// Resize handler for full screen
+window.addEventListener('resize', () => {
+  const { width, height } = getScreenSize();
+  game.scale.resize(width, height);
+  // Optionally, you can also update camera bounds in your scenes if needed
+});
+
 // Ensure socket is passed to scenes on start
 game.scene.start('MenuScene', { socket });
+import './global.css';
 import './registerSW';
