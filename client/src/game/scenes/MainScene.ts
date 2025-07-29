@@ -1,5 +1,5 @@
 // This file contains the MainScene class with proper camera separation
-// Game world rendered only in main camera, UI (stats) rendered only in UI camera
+// Game world rendered only in main camera, UI (stats, panels) rendered only in UI camera
 // Zoom affects only main camera
 
 import Phaser from 'phaser';
@@ -34,7 +34,7 @@ export class MainScene extends Phaser.Scene {
   lastGameTimeReceivedAt: number = 0;
 
   bg!: Phaser.GameObjects.Rectangle;
-
+  uiLayer!: Phaser.GameObjects.Container;
 
   constructor() {
     super('MainScene');
@@ -61,6 +61,11 @@ export class MainScene extends Phaser.Scene {
     this.uiCamera.setScroll(0, 0);
     this.uiCamera.setZoom(1);
 
+    // UI container
+    this.uiLayer = this.add.container(0, 0);
+    this.uiLayer.setDepth(1000);
+    this.uiLayer.setScrollFactor(0);
+
     this.bg = this.add.rectangle(
       this.mapDimensions.width / 2,
       this.mapDimensions.height / 2,
@@ -70,15 +75,23 @@ export class MainScene extends Phaser.Scene {
     );
     this.bg.setDepth(-1);
 
-    this.statsText = this.add.text(20, this.scale.height - 10, '', {
+    // Always position stats panel at top-left for visibility
+    this.statsText = this.add.text(20, 20, '', {
       fontSize: '16px',
       color: '#fff',
       fontFamily: 'Arial',
       backgroundColor: '#222',
       padding: { left: 10, right: 10, top: 4, bottom: 4 }
     });
-    this.statsText.setOrigin(0, 1);
+    this.statsText.setOrigin(0, 0);
     this.statsText.setDepth(1000);
+    this.uiLayer.add(this.statsText);
+
+    // Update UI camera and stats panel position on resize (mobile)
+    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+      this.uiCamera.setSize(gameSize.width, gameSize.height);
+      this.statsText.setPosition(20, 20);
+    });
 
     if (this.socket) {
       this.socket.on('gameState', (state: any) => {
@@ -147,19 +160,15 @@ export class MainScene extends Phaser.Scene {
     }
 
     this.updateStatsText();
+    this.updateUICameraFilter();
+  }
 
-    // Camera filtering
-    const gameObjectsRaw = [
-      this.bg,
-      ...this.planets.map(p => p.circle),
-      ...this.planets.map(p => p.healthArcGreen),
-      ...this.planets.map(p => p.healthArcRed),
-      ...this.units.map(u => u.circle),
-      ...this.units.map(u => u.highlight)
-    ];
-    const gameObjects = gameObjectsRaw.filter(obj => obj != null);
-    this.uiCamera.ignore(gameObjects);
-    this.cameras.main.ignore(this.statsText);
+  updateUICameraFilter() {
+    // Ignore everything except the UI container
+    this.uiCamera.ignore(
+      this.children.list.filter(obj => obj !== this.uiLayer)
+    );
+    this.cameras.main.ignore(this.uiLayer);
   }
 
   updateStatsText() {
@@ -217,9 +226,9 @@ export class MainScene extends Phaser.Scene {
       this.scene.start('MenuScene', { socket: this.socket });
     });
     panel.add([bg, resultText, btn]);
+    this.uiLayer.add(panel);
     this.endPanel = panel;
 
-    this.cameras.main.ignore(panel);
-    this.uiCamera.ignore([bg, resultText, btn]);
+    this.updateUICameraFilter();
   }
 }
