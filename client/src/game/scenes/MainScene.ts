@@ -1,8 +1,14 @@
+// This file contains the MainScene class with proper camera separation
+// Game world rendered only in main camera, UI (stats, panels) rendered only in UI camera
+// Zoom affects only main camera
+
 import Phaser from 'phaser';
 import { Planet, PlanetData } from '../entities/Planet';
 import { Unit, UnitData } from '../entities/Unit';
 import type { Stats } from '../types';
 import { SelectionManager } from '../selection/SelectionManager';
+import { InputManager } from '../input/InputManager';
+import { PhoneInputManager } from '../input/PhoneInputManager';
 
 export class MainScene extends Phaser.Scene {
   planets: Planet[] = [];
@@ -14,170 +20,121 @@ export class MainScene extends Phaser.Scene {
   myColor: number = 0x888888;
   statsText!: Phaser.GameObjects.Text;
   selectionManager: SelectionManager | null = null;
-  dragStart: Phaser.Math.Vector2 | null = null;
-  dragRect: Phaser.GameObjects.Graphics | null = null;
   socket: any = null;
   mapDimensions: { width: number; height: number } = { width: 1200, height: 800 };
 
-  constructor() {
-    super('MainScene');
-  }
+  inputManager: InputManager | null = null;
+  phoneInputManager: PhoneInputManager | null = null;
+  isMobileDevice: boolean = false;
 
+  uiCamera!: Phaser.Cameras.Scene2D.Camera;
   gameState: any = null;
   gameTime: number = 0;
   lastGameTime: number = 0;
   lastGameTimeReceivedAt: number = 0;
 
+  bg!: Phaser.GameObjects.Rectangle;
+  uiLayer!: Phaser.GameObjects.Container;
+
+  constructor() {
+    super('MainScene');
+  }
+
   init(data: any) {
-    console.log('[DEBUG] MainScene: init called with data:', data);
     this.playerId = data?.playerId || '';
     this.players = data?.players || [];
     this.gameState = data?.gameState || null;
     this.mapDimensions = data?.mapDimensions || { width: 1200, height: 800 };
     this.socket = data?.socket;
-    
-    console.log('[DEBUG] MainScene: initialized with:', {
-      playerId: this.playerId,
-      playersCount: this.players.length,
-      hasGameState: !!this.gameState,
-      mapDimensions: this.mapDimensions,
-      hasSocket: !!this.socket
-    });
-    
+
     const me = this.players.find(p => p.id === this.playerId);
     if (me) {
       this.myTeam = me.team;
       this.myColor = me.color;
-      console.log('[DEBUG] MainScene: Found my player data:', { team: this.myTeam, color: this.myColor });
-    } else {
-      console.warn('[DEBUG] MainScene: Could not find my player in players array');
     }
   }
 
   create() {
-    // Set up camera bounds based on map dimensions
+    // Set up cameras
     this.cameras.main.setBounds(0, 0, this.mapDimensions.width, this.mapDimensions.height);
-    
-    // Create a background
-    const bg = this.add.rectangle(this.mapDimensions.width / 2, this.mapDimensions.height / 2, 
-                                 this.mapDimensions.width, this.mapDimensions.height, 0x001122);
-    bg.setDepth(-1);
-    
-    // Affiche l'équipe/couleur et stats du joueur
+    this.cameras.main.name = 'MainCamera'; // Sûr
+    this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+    this.uiCamera.name = 'UICamera';
+    this.uiCamera.setScroll(0, 0);
+    this.uiCamera.setZoom(1);
+
+    // UI container
+    this.uiLayer = this.add.container(0, 0);
+    this.uiLayer.setDepth(1000);
+    this.uiLayer.setScrollFactor(0);
+
+    this.bg = this.add.rectangle(
+      this.mapDimensions.width / 2,
+      this.mapDimensions.height / 2,
+      this.mapDimensions.width,
+      this.mapDimensions.height,
+      0x001122
+    );
+    this.bg.setDepth(-1);
+
+    // Always position stats panel at top-left for visibility
     this.statsText = this.add.text(20, 20, '', {
-      fontSize: '20px',
+      fontSize: '16px',
       color: '#fff',
       fontFamily: 'Arial',
       backgroundColor: '#222',
-      padding: { left: 10, right: 10, top: 5, bottom: 5 }
+      padding: { left: 10, right: 10, top: 4, bottom: 4 }
     });
-    this.statsText.setScrollFactor(0); // Keep UI fixed on screen
-    this.updateStatsText();
+    this.statsText.setOrigin(0, 0);
+    this.statsText.setDepth(1000);
+    this.uiLayer.add(this.statsText);
 
-    // Listen for gameState updates from backend
-    this.socket = this.socket || (this.scene.settings.data as any)?.socket;
+    // Update UI camera and stats panel position on resize (mobile)
+    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+      this.uiCamera.setSize(gameSize.width, gameSize.height);
+      this.statsText.setPosition(20, 20);
+    });
+
     if (this.socket) {
       this.socket.on('gameState', (state: any) => {
         this.renderGameState(state);
-        // Only show end panel if game has run for at least 1 second
         if (state.winner !== undefined && this.endPanel == null && (state.time ?? 0) > 1000) {
           this.showEndPanel(state.winner);
         }
       });
     }
 
-    // SelectionManager setup
     this.selectionManager = new SelectionManager(this.units, this.planets, this.myTeam);
 
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (!this.selectionManager) return;
-      // Use world coordinates for all pointer logic
-      const wx = pointer.worldX;
-      const wy = pointer.worldY;
-      // Check if clicked on a planet
-      const clickedPlanet = this.planets.find(p => {
-        const dx = wx - p.x;
-        const dy = wy - p.y;
-        return Math.sqrt(dx * dx + dy * dy) < p.radius;
-      });
-      if (clickedPlanet && clickedPlanet.owner === this.myTeam) {
-        this.selectionManager.selectUnitsAroundPlanet(clickedPlanet);
-        return;
-      }
-      // Check if clicked on a unit (own units only)
-      const clicked = this.units.find(u => {
-        const dx = wx - u.circle.x;
-        const dy = wy - u.circle.y;
-        return Math.sqrt(dx * dx + dy * dy) < 14 && u.owner === this.myTeam;
-      });
-      if (clicked) {
-        this.selectionManager.selectUnit(clicked);
-        // Debug: log selection state
-        // eslint-disable-next-line no-console
-        console.log('[DEBUG] Clicked unit:', clicked.id, 'Selected:', !!this.selectionManager.selectedUnit);
-      } else if (this.selectionManager.selectedUnits.length > 0) {
-        // Send move command for all selected units
-        const unitIds = this.selectionManager.selectedUnits.map(u => u.id);
-        this.socket.emit('moveUnits', {
-          unitIds: unitIds,
-          x: wx,
-          y: wy
-        });
-        this.selectionManager.clearSelection();
-      } else {
-        // Start drag selection
-        this.dragStart = new Phaser.Math.Vector2(wx, wy);
-        if (!this.dragRect) {
-          this.dragRect = this.add.graphics();
-        }
-        this.dragRect.clear();
-        this.dragRect.lineStyle(2, 0xffff00, 1);
-        this.dragRect.strokeRect(wx, wy, 1, 1);
-      }
-    });
+    this.isMobileDevice = this.detectMobileDevice();
+    if (this.isMobileDevice) {
+      this.phoneInputManager = new PhoneInputManager(this, this.socket, this.myTeam);
+      this.phoneInputManager.setSelectionManager(this.selectionManager);
+      this.phoneInputManager.setUnitsAndPlanets(this.units, this.planets);
+    } else {
+      this.inputManager = new InputManager(this, this.socket, this.myTeam);
+      this.inputManager.setSelectionManager(this.selectionManager);
+      this.inputManager.setUnitsAndPlanets(this.units, this.planets);
+    }
 
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (this.dragStart && this.dragRect) {
-        const wx = pointer.worldX;
-        const wy = pointer.worldY;
-        this.dragRect.clear();
-        this.dragRect.lineStyle(2, 0xffff00, 1);
-        const x = Math.min(this.dragStart.x, wx);
-        const y = Math.min(this.dragStart.y, wy);
-        const w = Math.abs(wx - this.dragStart.x);
-        const h = Math.abs(wy - this.dragStart.y);
-        this.dragRect.strokeRect(x, y, w, h);
-      }
-    });
-
-    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      if (this.dragStart && this.dragRect && this.selectionManager) {
-        const wx = pointer.worldX;
-        const wy = pointer.worldY;
-        const x1 = Math.min(this.dragStart.x, wx);
-        const y1 = Math.min(this.dragStart.y, wy);
-        const x2 = Math.max(this.dragStart.x, wx);
-        const y2 = Math.max(this.dragStart.y, wy);
-        this.selectionManager.selectUnitsInRect(x1, y1, x2, y2);
-        this.dragRect.clear();
-        this.dragStart = null;
-      }
-    });
-    // Render initial state if present
     if (this.gameState) {
       this.renderGameState(this.gameState);
     }
+  }
+
+  detectMobileDevice(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }
 
   renderGameState(state: any) {
     this.gameTime = state.time || 0;
     this.lastGameTime = this.gameTime;
     this.lastGameTimeReceivedAt = Date.now();
-    // Remove old planets/units and all their graphics
+
     for (const p of this.planets) {
       p.circle.destroy();
-      if (p.healthArcGreen) p.healthArcGreen.destroy();
-      if (p.healthArcRed) p.healthArcRed.destroy();
+      p.healthArcGreen?.destroy();
+      p.healthArcRed?.destroy();
     }
     for (const u of this.units) {
       u.circle.destroy();
@@ -185,86 +142,74 @@ export class MainScene extends Phaser.Scene {
     }
     this.planets = [];
     this.units = [];
-    if (state && state.planets) {
+
+    if (state?.planets) {
       for (const p of state.planets) {
         const planet = new Planet(this, p as PlanetData);
         this.planets.push(planet);
         planet.updateColor(p.color);
-        // Units
+
         for (const u of p.units) {
           const unit = new Unit(this, planet, u as UnitData);
           this.units.push(unit);
           planet.units.push(unit);
         }
       }
-      // Update selectionManager with new units/planets
-      if (this.selectionManager) {
-        this.selectionManager.updateUnitsAndPlanets(this.units, this.planets);
-      }
+
+      this.selectionManager?.updateUnitsAndPlanets(this.units, this.planets);
+      this.inputManager?.setUnitsAndPlanets(this.units, this.planets);
+      this.phoneInputManager?.setUnitsAndPlanets(this.units, this.planets);
     }
-    //Unit.removeOrphanHighlights(this, this.units);
+
     this.updateStatsText();
+    this.updateUICameraFilter();
   }
 
-  clearSelection() {
-    if (this.selectionManager) this.selectionManager.clearSelection();
+  updateUICameraFilter() {
+    // Ignore everything except the UI container
+    this.uiCamera.ignore(
+      this.children.list.filter(obj => obj !== this.uiLayer)
+    );
+    this.cameras.main.ignore(this.uiLayer);
   }
 
   updateStatsText() {
     const myPlanets = this.planets.filter(p => p.owner === this.myTeam);
     const myUnits = myPlanets.reduce((sum, p) => sum + p.units.length, 0);
     this.statsText.setText(
-      `Team: ${this.myTeam}\nColor: #${this.myColor.toString(16)}\nPlanets: ${myPlanets.length}\nUnits: ${myUnits}`
+      `Team ${this.myTeam} | Color #${this.myColor.toString(16)} | Planets ${myPlanets.length} | Units ${myUnits}`
     );
     this.statsText.setStyle({ backgroundColor: `#${this.myColor.toString(16)}` });
   }
 
   update() {
-    // Camera controls (WASD movement)
-    const cameraSpeed = 5;
-    const keys = this.input.keyboard?.addKeys('Z,S,Q,D') as any;
-    if (keys) {
-      if (keys.Z?.isDown) {
-        this.cameras.main.scrollY -= cameraSpeed;
-      }
-      if (keys.S?.isDown) {
-        this.cameras.main.scrollY += cameraSpeed;
-      }
-      if (keys.Q?.isDown) {
-        this.cameras.main.scrollX -= cameraSpeed;
-      }
-      if (keys.D?.isDown) {
-        this.cameras.main.scrollX += cameraSpeed;
-      }
+    if (this.inputManager && !this.isMobileDevice) {
+      this.inputManager.updateCameraControls();
     }
-    
-    // Improved interpolation: smoothly interpolate between backend updates
+
     let interpFactor = 0;
-    const updateInterval = 50; // ms, should match backend broadcast interval
+    const updateInterval = 50;
     if (this.lastGameTimeReceivedAt && this.lastGameTime) {
       const timeSinceLastUpdate = Date.now() - this.lastGameTimeReceivedAt;
       interpFactor = Math.min(timeSinceLastUpdate / updateInterval, 1);
     }
 
     for (const unit of this.units) {
-      // If you want to interpolate between previous and current positions, you need to store previous positions.
-      // For now, we use backend time + interpolation factor for smoother movement.
       const t = (this.lastGameTime / 1000) + interpFactor * (updateInterval / 1000);
       unit.updatePosition(t);
     }
 
-    // Update highlights via SelectionManager (less frequently)
     if (this.selectionManager && this.time.now % 5 === 0) {
       this.selectionManager.updateHighlights();
     }
 
     this.updateStatsText();
   }
+
   showEndPanel(winner: number) {
     const isWinner = this.myTeam === winner;
     const text = isWinner ? 'You Win!' : 'You Lose';
     const panel = this.add.container(this.cameras.main.width / 2, this.cameras.main.height / 2);
-    panel.setScrollFactor(0); // Keep panel fixed on screen
     const bg = this.add.rectangle(0, 0, 400, 200, 0x222222, 0.95).setOrigin(0.5);
     const resultText = this.add.text(0, -40, text, {
       fontSize: '48px',
@@ -283,6 +228,9 @@ export class MainScene extends Phaser.Scene {
       this.scene.start('MenuScene', { socket: this.socket });
     });
     panel.add([bg, resultText, btn]);
+    this.uiLayer.add(panel);
     this.endPanel = panel;
+
+    this.updateUICameraFilter();
   }
 }

@@ -49,10 +49,6 @@ export class Unit {
   }
 
   
-  /**
-   * Remove the last drawn highlight and create a new one if selected.
-   * Always call this after changing selection or position.
-   */
   redrawHighlight() {
     if (this.highlight) {
       this.highlight.destroy();
@@ -60,6 +56,12 @@ export class Unit {
     }
     if (this.selected) {
       this.highlight = this.scene.add.circle(this.circle.x, this.circle.y, 18, 0xffff00, 0.3).setStrokeStyle(3, 0xffff00);
+
+      // Make sure highlight is excluded from UI camera
+      const uiCamera = this.scene.cameras?.cameras?.find(cam => cam.name === 'UICamera');
+      if (uiCamera) {
+        uiCamera.ignore(this.highlight);
+      }
     }
   }
 

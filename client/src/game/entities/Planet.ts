@@ -80,10 +80,10 @@ export class Planet {
       270 + 360 * percent,
       270 + 360,
       false,
-      0xff0000,
+      0x888888,
       0 // no fill
     );
-    this.healthArcRed.setStrokeStyle(6, 0xff0000, 1);
+    this.healthArcRed.setStrokeStyle(6, 0x888888, 1);
     this.healthArcRed.setClosePath(false);
   }
 

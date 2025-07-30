@@ -197,15 +197,35 @@ export class MenuScene extends Phaser.Scene {
           fontSize: '18px', color: '#fff', backgroundColor: '#228822', padding: { left: 10, right: 10, top: 4, bottom: 4 }, fontFamily: 'Arial'
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         this.copyLobbyBtn.on('pointerdown', () => {
-          navigator.clipboard.writeText(this.lobbyId);
-          if (this.copyLobbyBtn) {
-            this.copyLobbyBtn.setText('Copied!');
-          }
-          setTimeout(() => {
-            if (this.copyLobbyBtn) {
-              this.copyLobbyBtn.setText('Copy');
+          // Try modern clipboard API
+          const fallbackCopy = (text: string) => {
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            try {
+              document.execCommand('copy');
+              if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copied!');
+              setTimeout(() => {
+                if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copy');
+              }, 1000);
+            } catch (err) {
+              alert('Copy failed');
             }
-          }, 1000);
+            document.body.removeChild(tempInput);
+          };
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(this.lobbyId).then(() => {
+              if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copied!');
+              setTimeout(() => {
+                if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copy');
+              }, 1000);
+            }).catch(() => {
+              fallbackCopy(this.lobbyId);
+            });
+          } else {
+            fallbackCopy(this.lobbyId);
+          }
         });
       }
       this.copyLobbyBtn.setVisible(true);
