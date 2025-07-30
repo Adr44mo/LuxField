@@ -148,23 +148,33 @@ export class GameEngine {
     };
     const quadtree = new Quadtree(boundary, 8);
     for (const unit of allUnits) {
+      if (typeof unit.x !== 'number' || typeof unit.y !== 'number') continue;
       quadtree.insert(unit);
     }
+    // Track removed units to avoid double-processing
+    const removedUnitIds = new Set<string>();
     // Check collisions using quadtree
     for (const unit of allUnits) {
-      if (!unit.x || !unit.y) continue;
-      // Query nearby units
-      const range = { x: unit.x, y: unit.y, w: 40, h: 40 };
+      if (typeof unit.x !== 'number' || typeof unit.y !== 'number') continue;
+      if (removedUnitIds.has(unit.id)) continue;
+      // Query nearby units with a smaller range for better perf
+      const range = { x: unit.x, y: unit.y, w: 20, h: 20 };
       const nearby = quadtree.query(range);
+      let unitRemoved = false;
       for (const other of nearby) {
         if (other === unit) continue;
-        if (!other.x || !other.y) continue;
+        if (typeof other.x !== 'number' || typeof other.y !== 'number') continue;
+        if (removedUnitIds.has(other.id)) continue;
         if (unit.owner !== other.owner && unit.collidesWith(other)) {
           this.removeUnit(unit.id);
           this.removeUnit(other.id);
+          removedUnitIds.add(unit.id);
+          removedUnitIds.add(other.id);
+          unitRemoved = true;
           break;
         }
       }
+      if (unitRemoved) continue; // Don't process planet collision if unit was removed
       // Handle unit-planet collision (health logic)
       for (const planet of this.planets.values()) {
         const dx = unit.x - planet.x;
@@ -173,6 +183,7 @@ export class GameEngine {
         if (dist <= planet.radius + 10) {
           if (planet.handleUnitCollision(unit.toData())) {
             this.removeUnit(unit.id);
+            removedUnitIds.add(unit.id);
           }
           break; // Only one planet collision per unit per frame
         }
