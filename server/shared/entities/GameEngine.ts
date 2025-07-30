@@ -2,6 +2,7 @@
 import { CorePlanet } from '../entities/CorePlanet';
 import { CoreUnit } from '../entities/CoreUnit';
 import { GameState, PlayerID, Position, MoveCommand } from '../types';
+import { Quadtree } from './Quadtree';
 
 export class GameEngine {
   planets: Map<string, CorePlanet> = new Map();
@@ -126,32 +127,53 @@ export class GameEngine {
     return this.getGameState();
   }
 
-  // Handle unit collisions
+  // Handle unit collisions using Quadtree for spatial partitioning
   private handleCollisions(): void {
     const allUnits = Array.from(this.units.values());
-    // Handle unit-unit collisions (enemy units)
-    for (let i = 0; i < allUnits.length; i++) {
-      const unit1 = allUnits[i];
-      if (!unit1.x || !unit1.y) continue;
-      for (let j = i + 1; j < allUnits.length; j++) {
-        const unit2 = allUnits[j];
-        if (!unit2.x || !unit2.y) continue;
-        if (unit1.owner !== unit2.owner && unit1.collidesWith(unit2)) {
-          this.removeUnit(unit1.id);
-          this.removeUnit(unit2.id);
+    if (allUnits.length === 0) return;
+    // Determine bounds (could be improved)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const unit of allUnits) {
+      if (typeof unit.x !== 'number' || typeof unit.y !== 'number') continue;
+      if (unit.x < minX) minX = unit.x;
+      if (unit.y < minY) minY = unit.y;
+      if (unit.x > maxX) maxX = unit.x;
+      if (unit.y > maxY) maxY = unit.y;
+    }
+    const boundary = {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+      w: (maxX - minX) / 2 + 50,
+      h: (maxY - minY) / 2 + 50
+    };
+    const quadtree = new Quadtree(boundary, 8);
+    for (const unit of allUnits) {
+      quadtree.insert(unit);
+    }
+    // Check collisions using quadtree
+    for (const unit of allUnits) {
+      if (!unit.x || !unit.y) continue;
+      // Query nearby units
+      const range = { x: unit.x, y: unit.y, w: 40, h: 40 };
+      const nearby = quadtree.query(range);
+      for (const other of nearby) {
+        if (other === unit) continue;
+        if (!other.x || !other.y) continue;
+        if (unit.owner !== other.owner && unit.collidesWith(other)) {
+          this.removeUnit(unit.id);
+          this.removeUnit(other.id);
           break;
         }
       }
       // Handle unit-planet collision (health logic)
       for (const planet of this.planets.values()) {
-        const dx = unit1.x - planet.x;
-        const dy = unit1.y - planet.y;
+        const dx = unit.x - planet.x;
+        const dy = unit.y - planet.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist <= planet.radius + 10) {
-            if (planet.handleUnitCollision(unit1.toData())) {
-              this.removeUnit(unit1.id);
-            }
-
+          if (planet.handleUnitCollision(unit.toData())) {
+            this.removeUnit(unit.id);
+          }
           break; // Only one planet collision per unit per frame
         }
       }
