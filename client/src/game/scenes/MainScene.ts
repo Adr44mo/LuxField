@@ -57,7 +57,9 @@ export class MainScene extends Phaser.Scene {
   create() {
     // Set up cameras
     this.cameras.main.setBounds(0, 0, this.mapDimensions.width, this.mapDimensions.height);
+    this.cameras.main.name = 'MainCamera'; // Sûr
     this.uiCamera = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+    this.uiCamera.name = 'UICamera';
     this.uiCamera.setScroll(0, 0);
     this.uiCamera.setZoom(1);
 
