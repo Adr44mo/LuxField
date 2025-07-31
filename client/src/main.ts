@@ -34,4 +34,3 @@ window.addEventListener('resize', () => {
 // Ensure socket is passed to scenes on start
 game.scene.start('MenuScene', { socket });
 import './global.css';
-import './registerSW';
