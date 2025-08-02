@@ -1,5 +1,6 @@
 // Client-side Planet wrapper that extends CorePlanet with Phaser rendering
 import Phaser from 'phaser';
+import { ColorManager } from '../../utils/ColorManager';
 
 export interface PlanetData {
   id: string;
@@ -46,7 +47,7 @@ export class Planet {
     this.claimingTeam = data.claimingTeam ? { id: data.claimingTeam, color: data.claimingTeamColor } : null;
     this.claimingProgress = data.claimingProgress ?? 0;
     // Create Phaser circle for rendering
-    this.circle = scene.add.circle(this.x, this.y, this.radius, this.color).setStrokeStyle(4, 0xffffff);
+    this.circle = scene.add.circle(this.x, this.y, this.radius, this.color).setStrokeStyle(4, ColorManager.WHITE_COLOR);
     this.healthArcGreen = null;
     this.healthArcRed = null;
     this.drawHealthArcs(scene);
@@ -80,10 +81,10 @@ export class Planet {
       270 + 360 * percent,
       270 + 360,
       false,
-      0x888888,
+      ColorManager.NEUTRAL_COLOR,
       0 // no fill
     );
-    this.healthArcRed.setStrokeStyle(6, 0x888888, 1);
+    this.healthArcRed.setStrokeStyle(6, ColorManager.NEUTRAL_COLOR, 1);
     this.healthArcRed.setClosePath(false);
   }
 

@@ -29,6 +29,11 @@ export class CoreUnit {
     this.isOrbiting = data.isOrbiting;
   }
 
+  // Update unit color
+  updateColor(newColor: number): void {
+    this.color = newColor;
+  }
+
   // Update unit position based on time
   updatePosition(planetX: number, planetY: number, deltaTime: number): void {
     if (this.target && !this.isOrbiting) {

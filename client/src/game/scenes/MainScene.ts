@@ -8,6 +8,7 @@ import { Unit, UnitData } from '../entities/Unit';
 import type { Stats } from '../types';
 import { SelectionManager } from '../selection/SelectionManager';
 import { InputManager } from '../input/InputManager';
+import { ColorManager } from '../../utils/ColorManager';
 import { PhoneInputManager } from '../input/PhoneInputManager';
 
 export class MainScene extends Phaser.Scene {
@@ -17,7 +18,7 @@ export class MainScene extends Phaser.Scene {
   playerId: string = '';
   players: { id: string; color: number; team: number }[] = [];
   myTeam: number = 0;
-  myColor: number = 0x888888;
+  myColor: number = ColorManager.NEUTRAL_COLOR;
   statsText!: Phaser.GameObjects.Text;
   selectionManager: SelectionManager | null = null;
   socket: any = null;
@@ -73,7 +74,7 @@ export class MainScene extends Phaser.Scene {
       this.mapDimensions.height / 2,
       this.mapDimensions.width,
       this.mapDimensions.height,
-      0x001122
+      ColorManager.BACKGROUND_COLOR
     );
     this.bg.setDepth(-1);
 
@@ -210,7 +211,7 @@ export class MainScene extends Phaser.Scene {
     const isWinner = this.myTeam === winner;
     const text = isWinner ? 'You Win!' : 'You Lose';
     const panel = this.add.container(this.cameras.main.width / 2, this.cameras.main.height / 2);
-    const bg = this.add.rectangle(0, 0, 400, 200, 0x222222, 0.95).setOrigin(0.5);
+    const bg = this.add.rectangle(0, 0, 400, 200, ColorManager.UI_OVERLAY, 0.95).setOrigin(0.5);
     const resultText = this.add.text(0, -40, text, {
       fontSize: '48px',
       color: isWinner ? '#66ff66' : '#ff6666',

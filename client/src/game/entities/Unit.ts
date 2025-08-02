@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { PlayerID, Stats } from '../types';
 import { Planet } from './Planet';
+import { ColorManager } from '../../utils/ColorManager';
 
 export interface UnitData {
   id: string;
@@ -44,7 +45,7 @@ export class Unit {
     this.x = data.x;
     this.y = data.y;
     this.target = data.target;
-    this.circle = scene.add.circle(0, 0, 12, data.color).setStrokeStyle(2, 0xffffff);
+    this.circle = scene.add.circle(0, 0, 12, data.color).setStrokeStyle(2, ColorManager.WHITE_COLOR);
     this.updatePosition(0);
   }
 
@@ -55,7 +56,7 @@ export class Unit {
       this.highlight = null;
     }
     if (this.selected) {
-      this.highlight = this.scene.add.circle(this.circle.x, this.circle.y, 18, 0xffff00, 0.3).setStrokeStyle(3, 0xffff00);
+      this.highlight = this.scene.add.circle(this.circle.x, this.circle.y, 18, ColorManager.HIGHLIGHT_COLOR, 0.3).setStrokeStyle(3, ColorManager.HIGHLIGHT_COLOR);
 
       // Make sure highlight is excluded from UI camera
       const uiCamera = this.scene.cameras?.cameras?.find(cam => cam.name === 'UICamera');
@@ -122,8 +123,8 @@ export class Unit {
     scene.children.list.forEach(obj => {
       if (
         obj instanceof Phaser.GameObjects.Arc &&
-        obj.strokeColor === 0xffff00 &&
-        obj.fillColor === 0xffff00 &&
+        obj.strokeColor === ColorManager.HIGHLIGHT_COLOR &&
+        obj.fillColor === ColorManager.HIGHLIGHT_COLOR &&
         obj.radius === 18 &&
         !referenced.has(obj)
       ) {

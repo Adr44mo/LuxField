@@ -2,10 +2,9 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { GameEngine } from './shared/entities/GameEngine';
-import { CorePlanet } from './shared/entities/CorePlanet';
-import { CoreUnit } from './shared/entities/CoreUnit';
 import { GameState, MoveCommand, PlayerID } from './shared/types';
 import { MapManager } from './maps/MapManager';
+import { ColorManager } from './shared/ColorManager';
 
 const app = express();
 if (process.env.SERVE_FRONT === 'true') {
@@ -16,7 +15,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*' } });
 
 type Player = { id: string; team: number; color: number; ready: boolean };
-const COLORS = [0x3399ff, 0xff6666, 0x66ff66, 0xffcc00];
+
 // --- Lobby System ---
 type LobbyPlayer = { id: string; color: number; team: number; host: boolean; ready: boolean };
 type Lobby = {
@@ -31,6 +30,42 @@ const lobbies: Record<string, Lobby> = {};
 function makeLobbyId() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
+
+// Helper functions to update game entity colors
+function updatePlayerColors(gameEngine: GameEngine, team: number, newColor: number) {
+  // Update planets owned by this team
+  for (const planet of gameEngine.planets.values()) {
+    if (planet.owner === team) {
+      planet.updateColor(newColor);
+    }
+  }
+  
+  // Update units in game engine
+  for (const unit of gameEngine.units.values()) {
+    if (unit.owner === team) {
+      unit.updateColor(newColor);
+    }
+  }
+}
+
+function updatePlayerTeamAndColors(gameEngine: GameEngine, oldTeam: number, newTeam: number, newColor: number) {
+  // Update planets from old team to new team
+  for (const planet of gameEngine.planets.values()) {
+    if (planet.owner === oldTeam) {
+      planet.owner = newTeam;
+      planet.updateColor(newColor);
+    }
+  }
+  
+  // Update units in game engine
+  for (const unit of gameEngine.units.values()) {
+    if (unit.owner === oldTeam) {
+      unit.owner = newTeam;
+      unit.updateColor(newColor);
+    }
+  }
+}
+
 function emitLobbyUpdate(lobby: Lobby) {
   lobby.players.forEach(p => {
     io.to(p.id).emit('lobbyUpdate', {
@@ -61,7 +96,7 @@ io.on('connection', (socket: Socket) => {
     });
     // Create new lobby
     const lobbyId = makeLobbyId();
-    const player: LobbyPlayer = { id: socket.id, color: COLORS[0], team: 1, host: true, ready: false };
+    const player: LobbyPlayer = { id: socket.id, color: ColorManager.getTeamColor(1), team: 1, host: true, ready: false };
     lobbies[lobbyId] = {
       id: lobbyId,
       hostId: socket.id,
@@ -80,15 +115,15 @@ io.on('connection', (socket: Socket) => {
       l.players = l.players.filter(p => p.id !== socket.id);
     });
     // Add to lobby
-    // Assign next available team/color
+    // Assign next available team/color from 8 available teams
     let assignedTeam = 1;
-    for (let t = 1; t <= COLORS.length; t++) {
+    for (let t = 1; t <= ColorManager.getMaxTeams(); t++) { // Now checks up to 8 teams
       if (!lobby.players.some(p => p.team === t)) {
         assignedTeam = t;
         break;
       }
     }
-    const color = COLORS[assignedTeam - 1];
+    const color = ColorManager.getTeamColor(assignedTeam);
     const team = assignedTeam;
     const player: LobbyPlayer = { id: socket.id, color, team, host: false, ready: false };
     lobby.players.push(player);
@@ -99,7 +134,13 @@ io.on('connection', (socket: Socket) => {
   socket.on('chooseColor', ({ color }) => {
     Object.values(lobbies).forEach(lobby => {
       const p = lobby.players.find(p => p.id === socket.id);
-      if (p) p.color = color;
+      if (p) {
+        p.color = color;
+        // Update existing game entities if game is running
+        if (lobby.gameEngine) {
+          updatePlayerColors(lobby.gameEngine, p.team, color);
+        }
+      }
       emitLobbyUpdate(lobby);
     });
   });
@@ -108,8 +149,15 @@ io.on('connection', (socket: Socket) => {
     Object.values(lobbies).forEach(lobby => {
       const p = lobby.players.find(p => p.id === socket.id);
       if (p) {
+        const oldTeam = p.team;
         p.team = team;
-        p.color = COLORS[team - 1]; // Always match color to team
+        // Use the team index to get the corresponding color (team 1 = index 0, etc.)
+        p.color = ColorManager.getTeamColor(team); // Get color from ColorManager
+        
+        // Update existing game entities if game is running
+        if (lobby.gameEngine) {
+          updatePlayerTeamAndColors(lobby.gameEngine, oldTeam, team, p.color);
+        }
       }
       emitLobbyUpdate(lobby);
     });
@@ -223,7 +271,7 @@ io.on('connection', (socket: Socket) => {
 
   // Assign team/color
   const team = players.length + 1;
-  const color = COLORS[(team - 1) % COLORS.length];
+  const color = ColorManager.getTeamColor(team);
   players.push({ id: socket.id, team, color, ready: false });
   // No-op: ready logic is now per-lobby
 

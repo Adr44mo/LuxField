@@ -1,5 +1,6 @@
 
 import Phaser from 'phaser';
+import { ColorManager } from '../../utils/ColorManager';
 // The socket will be injected from main.ts
 export class MenuScene extends Phaser.Scene {
   copyLobbyBtn?: Phaser.GameObjects.Text;
@@ -11,13 +12,16 @@ export class MenuScene extends Phaser.Scene {
   ready: boolean = false;
   isHost: boolean = false;
   selectedTeam: number = 1;
-  selectedColor: number = 0x3399ff;
+  selectedColor: number = ColorManager.getTeamColor(1);
   createLobbyBtn!: Phaser.GameObjects.Text;
   joinLobbyBtn!: Phaser.GameObjects.Text;
   lobbyUIGroup!: Phaser.GameObjects.Group;
   readyButton!: Phaser.GameObjects.Text;
   startButton!: Phaser.GameObjects.Text;
-  playerListText!: Phaser.GameObjects.Text;
+  playerListContainer!: Phaser.GameObjects.Container;
+  teamContainer!: Phaser.GameObjects.Container;
+  mapContainer!: Phaser.GameObjects.Container;
+  controlsContainer!: Phaser.GameObjects.Container;
   kickButtons: Phaser.GameObjects.Text[] = [];
   colorButtons: Phaser.GameObjects.Text[] = [];
   teamButtons: Phaser.GameObjects.Text[] = [];
@@ -25,6 +29,8 @@ export class MenuScene extends Phaser.Scene {
   mapId: string = 'classic';
   availableMaps: any[] = [];
   currentMapIndex: number = 0;
+  
+  // Available colors are now managed by ColorManager
 
   constructor() {
     super('MenuScene');
@@ -38,18 +44,30 @@ export class MenuScene extends Phaser.Scene {
 
   create() {
     const { width, height } = this.sys.game.canvas;
-    this.add.text(width / 2, 60, 'LuxField', {
-      fontSize: '48px',
+    const isMobile = width < 800; // Detect mobile devices
+    
+    // Title
+    this.add.text(width / 2, 40, 'LuxField', {
+      fontSize: isMobile ? '32px' : '48px',
       color: '#fff',
       fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    // Lobby creation/join UI
-    this.createLobbyBtn = this.add.text(width / 2 - 120, 120, 'Create Lobby', {
-      fontSize: '24px', color: '#fff', backgroundColor: '#228822', padding: { left: 16, right: 16, top: 8, bottom: 8 }, fontFamily: 'Arial'
+    // Main menu buttons
+    this.createLobbyBtn = this.add.text(width / 2 - (isMobile ? 80 : 120), isMobile ? 80 : 120, 'Create Lobby', {
+      fontSize: isMobile ? '18px' : '24px', 
+      color: '#fff', 
+      backgroundColor: '#228822', 
+      padding: { left: 12, right: 12, top: 6, bottom: 6 }, 
+      fontFamily: 'Arial'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    this.joinLobbyBtn = this.add.text(width / 2 + 120, 120, 'Join Lobby', {
-      fontSize: '24px', color: '#fff', backgroundColor: '#222288', padding: { left: 16, right: 16, top: 8, bottom: 8 }, fontFamily: 'Arial'
+    
+    this.joinLobbyBtn = this.add.text(width / 2 + (isMobile ? 80 : 120), isMobile ? 80 : 120, 'Join Lobby', {
+      fontSize: isMobile ? '18px' : '24px', 
+      color: '#fff', 
+      backgroundColor: '#222288', 
+      padding: { left: 12, right: 12, top: 6, bottom: 6 }, 
+      fontFamily: 'Arial'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     this.createLobbyBtn.on('pointerdown', () => {
@@ -60,71 +78,14 @@ export class MenuScene extends Phaser.Scene {
       if (lobbyId) this.socket.emit('joinLobby', { lobbyId });
     });
 
-    // Hide lobby management UI until in a lobby
+    // Lobby UI Group
     this.lobbyUIGroup = this.add.group();
 
-    this.playerListText = this.add.text(width / 2, 180, 'No lobby joined.', {
-      fontSize: '22px', color: '#fff', fontFamily: 'Arial', align: 'center',
-    }).setOrigin(0.5);
-    this.lobbyUIGroup.add(this.playerListText);
-
-    // Team selection (4 teams/colors)
-    const teamNames = ['Blue', 'Red', 'Green', 'Yellow'];
-    const colors = [0x3399ff, 0xff6666, 0x66ff66, 0xffcc00];
-    this.teamButtons = [1, 2, 3, 4].map((team, i) => {
-      const btn = this.add.text(width / 2 - 240 + i * 160, 240, teamNames[i], {
-        fontSize: '20px', color: '#fff', backgroundColor: Phaser.Display.Color.IntegerToColor(colors[i]).rgba, padding: { left: 16, right: 16, top: 8, bottom: 8 }, fontFamily: 'Arial'
-      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      btn.on('pointerdown', () => {
-        this.selectedTeam = team;
-        this.socket.emit('chooseTeam', { team });
-        this.updateTeamButtons();
-      });
-      this.lobbyUIGroup.add(btn);
-      return btn;
-    });
-    this.updateTeamButtons();
-
-    // Map selection
-    this.mapButton = this.add.text(width / 2, 340, `Map: Loading...`, {
-      fontSize: '20px', color: '#fff', backgroundColor: '#888', padding: { left: 16, right: 16, top: 8, bottom: 8 }, fontFamily: 'Arial'
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    this.mapButton.on('pointerdown', () => {
-      if (this.isHost && this.availableMaps.length > 0) {
-        // Cycle through available maps
-        this.currentMapIndex = (this.currentMapIndex + 1) % this.availableMaps.length;
-        const selectedMap = this.availableMaps[this.currentMapIndex];
-        this.socket.emit('chooseMap', { mapId: selectedMap.id });
-      }
-    });
-    this.lobbyUIGroup.add(this.mapButton);
-
-    // Ready button
-    this.readyButton = this.add.text(width / 2, 400, 'READY', {
-      fontSize: '28px', color: '#fff', backgroundColor: '#228822', padding: { left: 24, right: 24, top: 8, bottom: 8 }, fontFamily: 'Arial'
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    this.readyButton.on('pointerdown', () => {
-      if (!this.ready && this.lobbyId) {
-        this.socket.emit('ready', { lobbyId: this.lobbyId });
-        this.ready = true;
-        this.readyButton.setAlpha(0.5);
-        this.readyButton.disableInteractive();
-        this.readyButton.setText('WAITING...');
-      }
-    });
-    this.lobbyUIGroup.add(this.readyButton);
-
-    // Start button (host only)
-    this.startButton = this.add.text(width / 2, 460, 'START GAME', {
-      fontSize: '32px', color: '#222', backgroundColor: '#fff', padding: { left: 30, right: 30, top: 10, bottom: 10 }, fontFamily: 'Arial'
-    }).setOrigin(0.5).setAlpha(0.5);
-    this.startButton.disableInteractive();
-    this.startButton.on('pointerdown', () => {
-      if (this.isHost && this.lobbyId && this.allReady()) {
-        this.socket.emit('startGame', { lobbyId: this.lobbyId });
-      }
-    });
-    this.lobbyUIGroup.add(this.startButton);
+    // Create organized containers
+    this.createPlayerListContainer(width, height, isMobile);
+    this.createTeamSelectionContainer(width, height, isMobile);
+    this.createMapSelectionContainer(width, height, isMobile);
+    this.createControlsContainer(width, height, isMobile);
 
     // Hide lobby UI initially
     this.lobbyUIGroup.setVisible(false);
@@ -179,75 +140,266 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  updatePlayerList() {
-    if (!this.playerListText) return;
-    if (!this.lobbyId) {
-      this.playerListText.setText('No lobby joined.');
-      return;
+  createPlayerListContainer(width: number, height: number, isMobile: boolean) {
+    const startY = isMobile ? 120 : 140;
+    
+    // Player list background
+    const listBg = this.add.rectangle(width / 2, startY + 80, width - 40, 160, ColorManager.UI_BACKGROUND, 0.8);
+    listBg.setStrokeStyle(2, ColorManager.UI_BORDER);
+    this.lobbyUIGroup.add(listBg);
+    
+    // Title
+    const titleText = this.add.text(width / 2, startY, 'Lobby Info', {
+      fontSize: isMobile ? '18px' : '20px',
+      color: '#fff',
+      fontFamily: 'Arial',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.lobbyUIGroup.add(titleText);
+    
+    // Create container for player list content
+    this.playerListContainer = this.add.container(width / 2, startY + 80);
+    this.lobbyUIGroup.add(this.playerListContainer);
+  }
+
+  createTeamSelectionContainer(width: number, height: number, isMobile: boolean) {
+    const startY = isMobile ? 300 : 320;
+    
+    // Team selection background
+    const teamBg = this.add.rectangle(width / 2, startY + 40, width - 40, 100, ColorManager.UI_BACKGROUND, 0.8);
+    teamBg.setStrokeStyle(2, ColorManager.UI_BORDER);
+    this.lobbyUIGroup.add(teamBg);
+    
+    // Title
+    const titleText = this.add.text(width / 2, startY, 'Select Team', {
+      fontSize: isMobile ? '16px' : '18px',
+      color: '#fff',
+      fontFamily: 'Arial',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.lobbyUIGroup.add(titleText);
+    
+    // Team buttons (8 teams for more players)
+    const teamNames = ['Team 1', 'Team 2', 'Team 3', 'Team 4', 'Team 5', 'Team 6', 'Team 7', 'Team 8'];
+    this.teamButtons = [];
+    
+    for (let i = 0; i < 8; i++) {
+      const row = Math.floor(i / 4);
+      const col = i % 4;
+      const x = width / 2 - 150 + col * 100;
+      const y = startY + 25 + row * 30;
+      
+      const color = ColorManager.getTeamColor(i + 1);
+      const btn = this.add.text(x, y, teamNames[i], {
+        fontSize: isMobile ? '12px' : '14px',
+        color: '#fff',
+        backgroundColor: Phaser.Display.Color.IntegerToColor(color).rgba,
+        padding: { left: 8, right: 8, top: 4, bottom: 4 },
+        fontFamily: 'Arial'
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      
+      btn.on('pointerdown', () => {
+        this.selectedTeam = i + 1;
+        this.selectedColor = color;
+        this.socket.emit('chooseTeam', { team: i + 1 });
+        this.socket.emit('chooseColor', { color: color }); // Also send color update
+        this.updateTeamButtons();
+      });
+      
+      this.lobbyUIGroup.add(btn);
+      this.teamButtons.push(btn);
     }
-    if (this.players.length === 0) {
-      this.playerListText.setText('Waiting for players...');
-      return;
-    }
-    let lines = [`Lobby ID: ${this.lobbyId}`];
-    // Add copy button for lobby ID
-    if (this.lobbyId) {
-      if (!this.copyLobbyBtn) {
-        this.copyLobbyBtn = this.add.text(this.playerListText.x + 120, this.playerListText.y - 18, 'Copy', {
-          fontSize: '18px', color: '#fff', backgroundColor: '#228822', padding: { left: 10, right: 10, top: 4, bottom: 4 }, fontFamily: 'Arial'
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        this.copyLobbyBtn.on('pointerdown', () => {
-          // Try modern clipboard API
-          const fallbackCopy = (text: string) => {
-            const tempInput = document.createElement('input');
-            tempInput.value = text;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            try {
-              document.execCommand('copy');
-              if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copied!');
-              setTimeout(() => {
-                if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copy');
-              }, 1000);
-            } catch (err) {
-              alert('Copy failed');
-            }
-            document.body.removeChild(tempInput);
-          };
-          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-            navigator.clipboard.writeText(this.lobbyId).then(() => {
-              if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copied!');
-              setTimeout(() => {
-                if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copy');
-              }, 1000);
-            }).catch(() => {
-              fallbackCopy(this.lobbyId);
-            });
-          } else {
-            fallbackCopy(this.lobbyId);
-          }
-        });
-      }
-      this.copyLobbyBtn.setVisible(true);
-    } else if (this.copyLobbyBtn) {
-      this.copyLobbyBtn.setVisible(false);
-    }
-    this.kickButtons.forEach(btn => btn.destroy());
-    this.kickButtons = [];
-    this.players.forEach((p, idx) => {
-      let line = `Player ${p.team} ${p.id === this.playerId ? '(You)' : ''} Color: #${p.color.toString(16)}${p.host ? ' [Host]' : ''}${p.ready ? ' [Ready]' : ''}`;
-      lines.push(line);
-      if (this.isHost && p.id !== this.playerId) {
-        const btn = this.add.text(50, 220 + idx * 30, 'Kick', {
-          fontSize: '18px', color: '#fff', backgroundColor: '#aa2222', padding: { left: 10, right: 10, top: 4, bottom: 4 }, fontFamily: 'Arial'
-        }).setInteractive({ useHandCursor: true });
-        btn.on('pointerdown', () => {
-          this.socket.emit('kickPlayer', { lobbyId: this.lobbyId, playerId: p.id });
-        });
-        this.kickButtons.push(btn);
+    
+    this.updateTeamButtons();
+  }
+
+  createMapSelectionContainer(width: number, height: number, isMobile: boolean) {
+    const startY = isMobile ? 460 : 480;
+    
+    // Map selection background
+    const mapBg = this.add.rectangle(width / 2, startY + 30, width - 40, 80, ColorManager.UI_BACKGROUND, 0.8);
+    mapBg.setStrokeStyle(2, ColorManager.UI_BORDER);
+    this.lobbyUIGroup.add(mapBg);
+    
+    // Title
+    const titleText = this.add.text(width / 2, startY, 'Map Selection', {
+      fontSize: isMobile ? '16px' : '18px',
+      color: '#fff',
+      fontFamily: 'Arial',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.lobbyUIGroup.add(titleText);
+    
+    // Map button
+    this.mapButton = this.add.text(width / 2, startY + 30, 'Map: Loading...', {
+      fontSize: isMobile ? '14px' : '16px',
+      color: '#fff',
+      backgroundColor: '#666666',
+      padding: { left: 12, right: 12, top: 6, bottom: 6 },
+      fontFamily: 'Arial'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    
+    this.mapButton.on('pointerdown', () => {
+      if (this.isHost && this.availableMaps.length > 0) {
+        this.currentMapIndex = (this.currentMapIndex + 1) % this.availableMaps.length;
+        const selectedMap = this.availableMaps[this.currentMapIndex];
+        this.socket.emit('chooseMap', { mapId: selectedMap.id });
       }
     });
-    this.playerListText.setText(lines.join('\n'));
+    
+    this.lobbyUIGroup.add(this.mapButton);
+  }
+
+  createControlsContainer(width: number, height: number, isMobile: boolean) {
+    const startY = isMobile ? 580 : 600;
+    
+    // Controls background
+    const controlsBg = this.add.rectangle(width / 2, startY + 40, width - 40, 100, ColorManager.UI_BACKGROUND, 0.8);
+    controlsBg.setStrokeStyle(2, ColorManager.UI_BORDER);
+    this.lobbyUIGroup.add(controlsBg);
+    
+    // Ready button
+    this.readyButton = this.add.text(width / 2 - 80, startY + 30, 'READY', {
+      fontSize: isMobile ? '20px' : '24px',
+      color: '#fff',
+      backgroundColor: '#228822',
+      padding: { left: 16, right: 16, top: 8, bottom: 8 },
+      fontFamily: 'Arial'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    
+    this.readyButton.on('pointerdown', () => {
+      if (!this.ready && this.lobbyId) {
+        this.socket.emit('ready', { lobbyId: this.lobbyId });
+        this.ready = true;
+        this.readyButton.setAlpha(0.5);
+        this.readyButton.disableInteractive();
+        this.readyButton.setText('WAITING...');
+      }
+    });
+    this.lobbyUIGroup.add(this.readyButton);
+    
+    // Start button (host only)
+    this.startButton = this.add.text(width / 2 + 80, startY + 30, 'START GAME', {
+      fontSize: isMobile ? '18px' : '22px',
+      color: '#222',
+      backgroundColor: '#fff',
+      padding: { left: 16, right: 16, top: 8, bottom: 8 },
+      fontFamily: 'Arial'
+    }).setOrigin(0.5).setAlpha(0.5);
+    
+    this.startButton.disableInteractive();
+    this.startButton.on('pointerdown', () => {
+      if (this.isHost && this.lobbyId && this.allReady()) {
+        this.socket.emit('startGame', { lobbyId: this.lobbyId });
+      }
+    });
+    this.lobbyUIGroup.add(this.startButton);
+  }
+
+  updatePlayerList() {
+    if (!this.playerListContainer) return;
+    
+    // Clear existing content EXCEPT the copy button
+    this.playerListContainer.each((child: any) => {
+      if (child !== this.copyLobbyBtn) {
+        child.destroy();
+      }
+    });
+    this.playerListContainer.removeAll(false); // Don't destroy children, just remove references
+    
+    if (!this.lobbyId) {
+      const noLobbyText = this.add.text(0, 0, 'No lobby joined.', {
+        fontSize: '18px', color: '#fff', fontFamily: 'Arial', align: 'center'
+      }).setOrigin(0.5);
+      this.playerListContainer.add(noLobbyText);
+      return;
+    }
+    
+    if (this.players.length === 0) {
+      const waitingText = this.add.text(0, 0, 'Waiting for players...', {
+        fontSize: '18px', color: '#fff', fontFamily: 'Arial', align: 'center'
+      }).setOrigin(0.5);
+      this.playerListContainer.add(waitingText);
+      return;
+    }
+    
+    // Lobby ID with copy button
+    const lobbyIdText = this.add.text(0, -60, `Lobby ID: ${this.lobbyId}`, {
+      fontSize: '16px', color: '#fff', fontFamily: 'Arial', fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.playerListContainer.add(lobbyIdText);
+    
+    // Create copy button if it doesn't exist, or re-add it if it exists
+    if (!this.copyLobbyBtn) {
+      this.copyLobbyBtn = this.add.text(120, -60, 'Copy', {
+        fontSize: '14px', color: '#fff', backgroundColor: '#228822', 
+        padding: { left: 8, right: 8, top: 4, bottom: 4 }, fontFamily: 'Arial'
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      
+      this.copyLobbyBtn.on('pointerdown', () => {
+        const fallbackCopy = (text: string) => {
+          const tempInput = document.createElement('input');
+          tempInput.value = text;
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          try {
+            document.execCommand('copy');
+            if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copied!');
+            setTimeout(() => {
+              if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copy');
+            }, 1000);
+          } catch (err) {
+            alert('Copy failed');
+          }
+          document.body.removeChild(tempInput);
+        };
+        
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(this.lobbyId).then(() => {
+            if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copied!');
+            setTimeout(() => {
+              if (this.copyLobbyBtn) this.copyLobbyBtn.setText('Copy');
+            }, 1000);
+          }).catch(() => {
+            fallbackCopy(this.lobbyId);
+          });
+        } else {
+          fallbackCopy(this.lobbyId);
+        }
+      });
+    }
+    // Always re-add the copy button to the container
+    this.playerListContainer.add(this.copyLobbyBtn);
+    
+    // Clear old kick buttons
+    this.kickButtons.forEach(btn => btn.destroy());
+    this.kickButtons = [];
+    
+    // Player list
+    this.players.forEach((p, idx) => {
+      const teamInfo = ColorManager.getTeamInfo(ColorManager.getTeamIdByColor(p.color));
+      const colorName = teamInfo?.name || 'Unknown';
+      const playerText = this.add.text(0, -20 + idx * 20, 
+        `${colorName} Team ${p.team} ${p.id === this.playerId ? '(You)' : ''}${p.host ? ' [Host]' : ''}${p.ready ? ' [Ready]' : ''}`, {
+        fontSize: '12px', color: '#fff', fontFamily: 'Arial'
+      }).setOrigin(0.5);
+      this.playerListContainer.add(playerText);
+      
+      // Kick button for host
+      if (this.isHost && p.id !== this.playerId) {
+        const kickBtn = this.add.text(120, -20 + idx * 20, 'Kick', {
+          fontSize: '10px', color: '#fff', backgroundColor: '#aa2222', 
+          padding: { left: 6, right: 6, top: 2, bottom: 2 }, fontFamily: 'Arial'
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        
+        kickBtn.on('pointerdown', () => {
+          this.socket.emit('kickPlayer', { lobbyId: this.lobbyId, playerId: p.id });
+        });
+        
+        this.playerListContainer.add(kickBtn);
+        this.kickButtons.push(kickBtn);
+      }
+    });
   }
 
   updateHostControls() {
@@ -261,7 +413,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   updateColorButtons() {
-    const colors = [0x3399ff, 0xff6666, 0x66ff66, 0xffcc00];
+    const colors = ColorManager.getColorsArray().slice(0, 4); // Use first 4 colors for demo
     this.colorButtons.forEach((btn, i) => {
       btn.setAlpha(this.selectedColor === colors[i] ? 1 : 0.7);
     });

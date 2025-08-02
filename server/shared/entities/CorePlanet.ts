@@ -1,9 +1,11 @@
 // Core Planet class - shared between client and server
 import { PlanetData, UnitData, Stats, PlayerID, Position } from '../types';
+import { ColorManager } from '../ColorManager';
 
 export class CorePlanet {
   claimingTeam: PlayerID | null = null;
   claimingProgress: number = 0;
+  claimingTeamColor: number | null = null; // Store the actual claiming team color
   id: string;
   x: number;
   y: number;
@@ -23,7 +25,7 @@ export class CorePlanet {
     this.x = data.x;
     this.y = data.y;
     this.radius = data.radius || 40;
-    this.color = data.color || 0x888888;
+    this.color = data.color || ColorManager.NEUTRAL_COLOR;
     this.owner = data.owner || 0;
     this.stats = data.stats || { health: 100, damage: 10, production: 1 };
     this.maxUnits = data.maxUnits || 8;
@@ -32,6 +34,14 @@ export class CorePlanet {
     this.units = data.units || [];
     this.maxHealth = data.maxHealth || 100;
     this.health = data.health !== undefined ? data.health : this.maxHealth;
+  }
+
+  // Update planet color and all its units
+  updateColor(newColor: number): void {
+    this.color = newColor;
+    this.units.forEach(unit => {
+      unit.color = newColor;
+    });
   }
 
   // Core game logic methods
@@ -92,18 +102,15 @@ export class CorePlanet {
       health: this.health,
       maxHealth: this.maxHealth,
       claimingTeam: this.claimingTeam === null ? undefined : this.claimingTeam,
-      claimingTeamColor: this.claimingTeam ? this.getTeamColor(this.claimingTeam) : undefined,
+      claimingTeamColor: this.claimingTeamColor || undefined,
       claimingProgress: this.claimingProgress
     };
 
   }
 
-  // Helper to get team color (example: you may need to pass a color map from GameEngine)
+  // Helper to get team color (now uses ColorManager)
   getTeamColor(teamId: PlayerID): number {
-    // Example: hardcoded colors, replace with your actual color logic
-    const COLORS = [0x3399ff, 0xff6666, 0x66ff66, 0xffcc00, 0x888888];
-    if (teamId > 0 && teamId <= COLORS.length) return COLORS[teamId - 1];
-    return 0x888888;
+    return ColorManager.getTeamColor(teamId);
   }
   /**
    * Handle collision with a unit. Returns true if unit should be destroyed.
@@ -114,12 +121,14 @@ export class CorePlanet {
       if (this.claimingTeam === null || this.claimingTeam === unit.owner) {
         // Start or continue claiming by this team
         this.claimingTeam = unit.owner;
+        this.claimingTeamColor = unit.color; // Store the actual unit's color
         this.claimingProgress += 10;
         this.health = Math.min(this.maxHealth, this.claimingProgress);
         if (this.claimingProgress >= this.maxHealth) {
           this.owner = this.claimingTeam;
-          this.color = unit.color;
+          this.color = this.claimingTeamColor || unit.color; // Use the stored claiming color
           this.claimingTeam = null;
+          this.claimingTeamColor = null;
           this.claimingProgress = 0;
         }
         return true;
@@ -130,6 +139,7 @@ export class CorePlanet {
         if (this.health === 0) {
           // Only reset claiming if health reaches zero
           this.claimingTeam = null;
+          this.claimingTeamColor = null;
           this.claimingProgress = 0;
         }
         return true;
@@ -147,7 +157,7 @@ export class CorePlanet {
       this.health = Math.max(0, this.health - 10);
       if (this.health === 0) {
         this.owner = 0; // Set to neutral when health reaches zero
-        this.color = 0x888888; // Reset color to neutral gray
+        this.color = ColorManager.NEUTRAL_COLOR; // Reset color to neutral gray
       }
       return true;
     }
