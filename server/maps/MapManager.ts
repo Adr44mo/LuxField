@@ -2,13 +2,19 @@ import { MapBase, PlayerInfo } from './MapBase';
 import { ClassicMap } from './ClassicMap';
 import { BattlegroundMap } from './BattlegroundMap';
 import { FortressMap } from './FortressMap';
+import { DuelMap } from './DuelMap';
+import { MegaBattleMap } from './MegaBattleMap';
+import { TeamWarMap } from './TeamWarMap';
 import { GameEngine } from '../shared/entities/GameEngine';
 
 export class MapManager {
   private static maps: Map<string, MapBase> = new Map([
+    ['duel', new DuelMap()],
     ['classic', new ClassicMap()],
+    ['teamwar', new TeamWarMap()],
     ['battleground', new BattlegroundMap()],
-    ['fortress', new FortressMap()]
+    ['fortress', new FortressMap()],
+    ['megabattle', new MegaBattleMap()]
   ]);
 
   static getAllMaps() {
