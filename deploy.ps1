@@ -20,7 +20,8 @@ Copy-Item -Recurse -Force client/dist/* server/public/
 
 Write-Host "=== Adding and committing built files ==="
 git add -f server/public
-git commit -m "Deploy: update built frontend and merge main"
-git push origin deploy
+git commit -m "Deploy: update built frontend and sync with main"
+# Force push to override remote deploy branch
+git push --force-with-lease origin deploy
 
 Write-Host "=== Deploy branch is up to date and ready for Render! ==="
