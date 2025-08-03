@@ -2,10 +2,10 @@
 
 # don't forget to change the .env.render file before deploying!
 
-Write-Host "=== Switching to deploy branch and merging main ==="
+Write-Host "=== Switching to deploy branch and syncing with main ==="
 git checkout deploy
-git merge -s ours main
-git checkout main -- .
+# Reset deploy branch to exactly match main
+git reset --hard main
 
 Write-Host "=== Building frontend ==="
 cd client
