@@ -21,7 +21,7 @@ Write-Host "=== Building frontend for production ==="
 cd client
 npm install
 # Build with production environment
-npm run build -- --mode production
+npm run build
 
 Write-Host "=== Copying frontend build to server/public ==="
 cd ..
