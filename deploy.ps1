@@ -2,15 +2,26 @@
 
 # don't forget to change the .env.render file before deploying!
 
+Write-Host "=== Checking current scene configuration ==="
+$mainTsContent = Get-Content "client\src\main.ts" -Raw
+if ($mainTsContent -match "MenuSceneRefactored") {
+    Write-Host "✓ Using MenuSceneRefactored"
+} elseif ($mainTsContent -match "MenuScene") {
+    Write-Host "✓ Using MenuScene"
+} else {
+    Write-Host "⚠ WARNING: No menu scene detected in main.ts"
+}
+
 Write-Host "=== Switching to deploy branch and syncing with main ==="
 git checkout deploy
 # Reset deploy branch to exactly match main
 git reset --hard main
 
-Write-Host "=== Building frontend ==="
+Write-Host "=== Building frontend for production ==="
 cd client
 npm install
-npm run build
+# Build with production environment
+npm run build -- --mode production
 
 Write-Host "=== Copying frontend build to server/public ==="
 cd ..
